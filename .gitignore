@@ -67,8 +67,8 @@ opc/scripts/archive/
 # OPC internal caches
 opc/.claude/cache/
 
-# Thoughts/handoffs (session-specific context)
-thoughts/
+# Thoughts - tracked for continuity
+# thoughts/
 
 # OPC archives (historical)
 opc/archive/
@@ -85,7 +85,7 @@ swe-bench-tldr/
 archive/
 cache/
 image-cache/
-plans/
+# plans/ - consolidated to thoughts/shared/plans/
 plugins/
 session-env/
 telemetry/

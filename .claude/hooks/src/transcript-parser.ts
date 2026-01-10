@@ -218,50 +218,71 @@ export function generateAutoHandoff(summary: TranscriptSummary, sessionName: str
   const timestamp = new Date().toISOString();
   const lines: string[] = [];
 
+  // Categorize todos for Ledger section
+  const inProgress = summary.lastTodos.filter(t => t.status === 'in_progress');
+  const pending = summary.lastTodos.filter(t => t.status === 'pending');
+  const completed = summary.lastTodos.filter(t => t.status === 'completed');
+
+  // Determine current focus for Ledger
+  const currentFocus = inProgress.length > 0
+    ? inProgress[0].content
+    : pending.length > 0
+      ? pending[0].content
+      : 'Continue from last context';
+
   // YAML frontmatter
   lines.push('---');
   lines.push(`date: ${timestamp}`);
   lines.push('type: auto-handoff');
   lines.push('trigger: pre-compact-auto');
   lines.push(`session: ${sessionName}`);
+  lines.push('status: partial');
   lines.push('---');
   lines.push('');
 
   // Header
   lines.push('# Auto-Handoff (PreCompact)');
   lines.push('');
-  lines.push('This handoff was automatically generated before context compaction.');
+
+  // MANDATORY Ledger Section - extracted by SessionStart hook
+  lines.push('## Ledger');
+  lines.push('<!-- MANDATORY: This section is extracted by SessionStart hook for context recovery -->');
+  lines.push(`**Updated:** ${timestamp}`);
+  lines.push(`**Goal:** Continue work on ${sessionName}`);
+  lines.push(`**Branch:** (check with git branch)`);
+  lines.push(`**Test:** (verify with project test command)`);
   lines.push('');
-
-  // In Progress section (TodoWrite state)
-  lines.push('## In Progress');
+  lines.push('### Now');
+  lines.push(`[->] ${currentFocus}`);
   lines.push('');
-  if (summary.lastTodos.length > 0) {
-    const inProgress = summary.lastTodos.filter(t => t.status === 'in_progress');
-    const pending = summary.lastTodos.filter(t => t.status === 'pending');
-    const completed = summary.lastTodos.filter(t => t.status === 'completed');
-
-    if (inProgress.length > 0) {
-      lines.push('**Active:**');
-      inProgress.forEach(t => lines.push(`- [>] ${t.content}`));
-      lines.push('');
-    }
-
-    if (pending.length > 0) {
-      lines.push('**Pending:**');
-      pending.forEach(t => lines.push(`- [ ] ${t.content}`));
-      lines.push('');
-    }
-
-    if (completed.length > 0) {
-      lines.push('**Completed this session:**');
-      completed.forEach(t => lines.push(`- [x] ${t.content}`));
-      lines.push('');
-    }
+  lines.push('### This Session');
+  if (completed.length > 0) {
+    completed.forEach(t => lines.push(`- [x] ${t.content}`));
+  } else if (summary.filesModified.length > 0) {
+    lines.push(`- [x] Modified ${summary.filesModified.length} file(s)`);
   } else {
-    lines.push('No TodoWrite state captured.');
-    lines.push('');
+    lines.push('- [x] Session auto-captured before compaction');
   }
+  lines.push('');
+  lines.push('### Next');
+  if (pending.length > 0) {
+    pending.slice(0, 5).forEach(t => lines.push(`- [ ] ${t.content}`));
+  } else if (inProgress.length > 1) {
+    inProgress.slice(1).forEach(t => lines.push(`- [ ] ${t.content}`));
+  } else {
+    lines.push('- [ ] Review context and continue work');
+  }
+  lines.push('');
+  lines.push('### Decisions');
+  lines.push('- (auto-captured - review for accuracy)');
+  lines.push('');
+  lines.push('### Open Questions');
+  lines.push('- UNCONFIRMED: Verify state is accurate after resume');
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+  lines.push('*This handoff was automatically generated before context compaction.*');
+  lines.push('');
 
   // Recent Actions section
   lines.push('## Recent Actions');

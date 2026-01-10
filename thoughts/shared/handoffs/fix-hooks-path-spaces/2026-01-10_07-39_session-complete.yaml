@@ -1,0 +1,78 @@
+---
+session: fix-hooks-path-spaces
+date: 2026-01-10
+status: partial
+outcome: PARTIAL_PLUS
+---
+
+goal: Fix Claude Code hooks to handle paths with spaces via bash -c wrappers
+now: Create PR from carmandale:fix/hooks-path-spaces to parcadei:main, then test in fresh session
+
+test: |
+  python3 -c "import json; json.load(open('.claude/settings.json'))"
+  grep 'CLAUDE_PROJECT_DIR' .claude/settings.json | grep -v "bash -c" | wc -l  # Should be 0
+
+done_this_session:
+  - task: Investigated crash - found hook failure due to spaced paths
+    files: []
+  - task: Forked parcadei/Continuous-Claude-v3 to carmandale/Continuous-Claude-v3
+    files: []
+  - task: Created feature branch fix/hooks-path-spaces
+    files: []
+  - task: Created implementation plan
+    files: [thoughts/shared/plans/fix-hooks-path-spaces.md]
+  - task: Ran pre-mortem analysis (0 tigers, all paper tigers verified)
+    files: []
+  - task: Wrapped 25 hooks using $CLAUDE_PROJECT_DIR in bash -c
+    files: [.claude/settings.json]
+  - task: Compiled TypeScript hooks (30 .mjs files in dist/)
+    files: [.claude/hooks/dist/]
+  - task: Committed and pushed to fork
+    files: []
+
+blockers: []
+
+questions:
+  - Does the fix actually work? Need to test in fresh Claude Code session
+  - Should PR include documentation about paths with spaces?
+
+decisions:
+  - bash_c_wrapper: Chose bash -c '...' because it's the standard solution for shell quoting - bash handles variable expansion internally with proper quoting
+  - leave_home_unchanged: $HOME never has spaces on macOS, so left those 12 hooks unchanged
+  - outer_single_inner_double: Single quotes outside preserve everything literally, double quotes inside allow $VAR expansion
+
+findings:
+  - root_cause: Claude Code strips quotes from commands before shell execution, causing word splitting
+  - pattern: bash -c 'cmd "$VAR/path"' works because bash expands $VAR with quotes intact
+  - symlink_fails: Even ~/dev symlink resolves to real path with spaces - can't work around
+  - hook_counts: 25 use $CLAUDE_PROJECT_DIR (fixed), 12 use $HOME (unchanged)
+
+worked:
+  - /workflow-router for structured approach (goal → resources → plan → premortem → implement)
+  - Pre-mortem verification caught false positives before implementation
+  - Creating plan before implementing
+  - Compiling hooks after settings.json changes
+
+failed:
+  - Simple quoting in JSON - Claude Code strips quotes before shell execution
+  - Symlink workaround - Claude Code resolves symlinks to real paths
+
+next:
+  - Create PR from carmandale:fix/hooks-path-spaces to parcadei:main
+  - Test hooks work in fresh Claude Code session
+  - Consider documentation about bash -c pattern for paths with spaces
+
+files:
+  created:
+    - thoughts/shared/plans/fix-hooks-path-spaces.md
+    - thoughts/shared/handoffs/fix-hooks-path-spaces/current.md
+    - thoughts/shared/handoffs/fix-hooks-path-spaces/2026-01-10_07-39_session-complete.yaml
+  modified:
+    - .claude/settings.json
+    - .claude/hooks/package-lock.json
+
+git:
+  branch: fix/hooks-path-spaces
+  commit: 529c849
+  remote: fork (carmandale/Continuous-Claude-v3)
+  pr_ready: https://github.com/carmandale/Continuous-Claude-v3/pull/new/fix/hooks-path-spaces
