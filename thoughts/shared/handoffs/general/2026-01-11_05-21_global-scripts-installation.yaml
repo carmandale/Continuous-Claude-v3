@@ -1,0 +1,73 @@
+---
+session: general
+date: 2026-01-11
+status: complete
+outcome: SUCCEEDED
+---
+
+goal: Made OPC core scripts globally available at ~/.claude/scripts/ so all agents can use memory/recall/artifacts regardless of project
+now: Verify global scripts work in other projects (e.g., mayor workspace)
+test: cd ~/.claude/scripts && uv run python -m core.recall_learnings --query "test" --k 1
+
+done_this_session:
+  - task: Fixed create_handoff skill to use global scripts
+    files: [~/.claude/skills/create_handoff/SKILL.md]
+  - task: Created pyproject.toml with dependencies for global scripts
+    files: [~/.claude/scripts/pyproject.toml]
+  - task: Fixed imports from scripts.core.db.* to core.db.*
+    files: [~/.claude/scripts/core/recall_learnings.py, ~/.claude/scripts/core/store_learning.py]
+  - task: Created global .env with DATABASE_URL
+    files: [~/.claude/.env]
+  - task: Updated rules to use global paths
+    files: [~/.claude/rules/dynamic-recall.md, ~/.claude/rules/proactive-delegation.md, ~/.claude/rules/agent-memory-recall.md]
+  - task: Fixed archival_memory embedding dimension (4096 -> 1024)
+    files: []
+  - task: Synced rules to project-level copies
+    files: [.claude/rules/dynamic-recall.md, .claude/rules/proactive-delegation.md, .claude/rules/agent-memory-recall.md]
+  - task: Synced fixed scripts back to OPC
+    files: [opc/scripts/core/recall_learnings.py, opc/scripts/core/store_learning.py]
+
+blockers: []
+
+questions:
+  - Should ~/.claude/scripts/ be versioned separately from OPC?
+  - Need sync mechanism to keep global scripts updated when OPC changes?
+
+decisions:
+  - global_location: ~/.claude/scripts/ - aligns with existing ~/.claude/ structure
+  - imports: Changed from scripts.core.db.* to core.db.* for module-style execution
+  - embeddings: Made sentence-transformers an optional dependency, installed with --extra embeddings
+
+findings:
+  - scripts_already_copied: Scripts were already in ~/.claude/scripts/core/ but missing pyproject.toml
+  - dimension_mismatch: Database had vector(4096) but BGE model produces 1024-dim embeddings
+  - env_loading: Scripts already look for ~/.claude/.env - just needed to create the file
+
+worked:
+  - Using python -m core.module_name instead of python scripts/core/module.py
+  - uv sync --extra embeddings to install sentence-transformers
+  - Altering PostgreSQL column type for embedding dimension
+
+failed: []
+
+next:
+  - Test global scripts in mayor workspace or another project
+  - Consider creating a sync mechanism (symlink or script) to keep global scripts updated
+  - Document the global scripts setup in a README
+
+files:
+  created:
+    - ~/.claude/scripts/pyproject.toml
+    - ~/.claude/.env
+  modified:
+    - ~/.claude/skills/create_handoff/SKILL.md
+    - ~/.claude/rules/dynamic-recall.md
+    - ~/.claude/rules/proactive-delegation.md
+    - ~/.claude/rules/agent-memory-recall.md
+    - ~/.claude/scripts/core/recall_learnings.py
+    - ~/.claude/scripts/core/store_learning.py
+    - opc/scripts/core/recall_learnings.py
+    - opc/scripts/core/store_learning.py
+    - .claude/rules/dynamic-recall.md
+    - .claude/rules/proactive-delegation.md
+    - .claude/rules/agent-memory-recall.md

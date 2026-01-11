@@ -72,8 +72,8 @@ After completing a workflow, suggest the natural next step:
 Before research tasks, check for prior work:
 
 ```bash
-# Quick memory check
-(cd $CLAUDE_PROJECT_DIR/opc && uv run python scripts/core/recall_learnings.py --query "<topic>" --k 3 --text-only)
+# Quick memory check (uses global scripts - works in any project)
+cd ~/.claude/scripts && uv run python -m core.recall_learnings --query "<topic>" --k 3 --text-only
 ```
 
 If relevant memory found: "I researched this on [date] - reuse or refresh?"

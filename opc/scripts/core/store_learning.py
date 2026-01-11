@@ -97,11 +97,11 @@ async def store_learning_v2(
         dict with success status, memory_id, or skipped info for duplicates
     """
     try:
-        from scripts.core.db.memory_factory import (
+        from core.db.memory_factory import (
             create_memory_service,
             get_default_backend,
         )
-        from scripts.core.db.embedding_service import EmbeddingService
+        from core.db.embedding_service import EmbeddingService
     except ImportError as e:
         return {"success": False, "error": f"Memory service not available: {e}"}
 
@@ -199,11 +199,11 @@ async def store_learning(
         dict with success status and memory_id
     """
     try:
-        from scripts.core.db.memory_factory import (
+        from core.db.memory_factory import (
             create_memory_service,
             get_default_backend,
         )
-        from scripts.core.db.embedding_service import EmbeddingService
+        from core.db.embedding_service import EmbeddingService
     except ImportError as e:
         return {"success": False, "error": f"Memory service not available: {e}"}
 
