@@ -1,0 +1,56 @@
+---
+session: general
+date: 2026-01-12
+status: complete
+outcome: SUCCEEDED
+bead: 30w
+---
+
+goal: Fix worktree event isolation so polecat events go to main repo
+now: Decide how to persist ~/.claude/hooks changes (not a git repo)
+test: Create worktree, simulate session end, verify event goes to main repo events dir
+
+done_this_session:
+  - task: Diagnosed worktree event isolation bug
+    files: [~/.claude/hooks/src/session-end-cleanup.ts]
+  - task: Added getMainRepoRoot() function to detect worktrees
+    files: [~/.claude/hooks/src/session-end-cleanup.ts:29-56]
+  - task: Updated writeSessionEvent() to use main repo path
+    files: [~/.claude/hooks/src/session-end-cleanup.ts:78-82]
+  - task: Verified fix with test worktree
+    files: []
+
+blockers:
+  - ~/.claude/hooks/ is not a git repo - changes are untracked
+
+questions:
+  - Should ~/.claude/hooks/ be initialized as a git repo?
+  - Or should hook changes be tracked elsewhere (e.g., dotfiles repo)?
+
+decisions:
+  git_common_dir: Used `git rev-parse --git-common-dir` to find main repo root from worktree
+  absolute_path_handling: Convert relative .git paths to absolute before extracting parent
+
+findings:
+  worktree_isolation: Events written in worktrees go to worktree's own thoughts/shared/ not main repo
+  git_common_dir_behavior: Returns shared .git dir for worktrees, enabling main repo detection
+  test_verification: Created test worktree, simulated session end, confirmed event went to main repo
+
+worked:
+  - git rev-parse --git-common-dir returns main repo .git even from worktree
+  - path.dirname(absoluteCommonDir) gives main repo root
+  - Test worktree creation/cleanup for verification
+
+failed:
+  - Initially asked to commit without checking if directory was git repo
+
+next:
+  - Decide persistence strategy for ~/.claude/hooks/ changes
+  - Either init git repo in ~/.claude/hooks/ or copy to tracked location
+  - Close bead 30w properly after persistence decision
+
+files:
+  created: []
+  modified:
+    - ~/.claude/hooks/src/session-end-cleanup.ts
+    - ~/.claude/hooks/dist/session-end-cleanup.mjs (built)
