@@ -1,0 +1,79 @@
+---
+session: continuity-system
+date: 2026-01-11
+status: complete
+outcome: SUCCEEDED
+---
+
+goal: Research and design ledger merge strategy for parallel agent worktrees
+now: Run premortem on ledger-synthesis-system.md plan, then implement Phase 1 (event writer)
+test: ls thoughts/shared/plans/2026-01-11-ledger-synthesis-system.md
+
+done_this_session:
+  - task: Resumed hooks-path-spaces handoff, created PR #47
+    files: []
+  - task: Researched multi-agent worktree merge handling via oracle agent
+    files: [.claude/cache/agents/oracle/latest-output.md]
+  - task: Consulted GPT-5.2 Pro via oracle CLI for ledger merge best practices
+    files: []
+  - task: Created comprehensive ledger synthesis system plan
+    files: [thoughts/shared/plans/2026-01-11-ledger-synthesis-system.md]
+
+blockers: []
+
+questions:
+  - Should current.md be git-tracked or generated on-demand only?
+  - How long to keep archived events?
+  - Should synthesis run automatically on session start, or only on demand?
+
+decisions:
+  - event_fragments: Use append-only event files instead of editing current.md - avoids merge conflicts entirely
+  - crdt_semantics: Different sections use different merge rules (LWW for Now, union for This Session, etc.)
+  - synthesis_on_start: Regenerate current.md from events on session start
+  - standalone_design: System works without Gas Town but integrates with refinery workflow
+
+findings:
+  - git_merge_drivers_unreliable: Custom git merge drivers don't work on GitHub PR merges - only local
+  - towncrier_pattern: Changelog fragment pattern (separate files → compiled view) is battle-tested
+  - database_is_fine: PostgreSQL learnings have no merge issues (UUID keys)
+  - agent_mail_separate: Agent Mail is for runtime coordination, not merge resolution
+
+worked:
+  - Oracle CLI (oracle --prompt) for deep research with GPT-5.2 Pro
+  - workflow-router skill for structured research delegation
+  - Gas Town agent discussion provided refinery merge concept
+
+failed: []
+
+next:
+  - Run premortem on thoughts/shared/plans/2026-01-11-ledger-synthesis-system.md
+  - Implement Phase 1 - Event writer (modify session-end-cleanup.ts)
+  - Implement Phase 2 - Synthesizer core logic
+  - Test with parallel worktree scenario
+
+files:
+  created:
+    - thoughts/shared/plans/2026-01-11-ledger-synthesis-system.md
+    - thoughts/shared/handoffs/continuity-system/2026-01-11_05-07_ledger-synthesis-research.yaml
+  modified: []
+
+research_sources:
+  - source: Oracle GPT-5.2 Pro (12 min consultation)
+    key_insight: Event log + materialized view pattern, CRDT merge semantics per section
+    references:
+      - LangGraph checkpointers (DB persistence)
+      - AutoGen Redis memory
+      - towncrier changelog fragments
+      - Yjs/Automerge for CRDT concepts
+  - source: Gas Town agent discussion
+    key_insight: Refinery role handles synthesis at merge time
+    pattern: Scoped ledgers (ledger-{agent}.md) → synthesis → unified current.md
+
+plan_location: thoughts/shared/plans/2026-01-11-ledger-synthesis-system.md
+
+section_merge_rules:
+  Now: LWW Register - pick entry with max (ts, agent_id)
+  This_Session: Grow-only Set - union, dedupe by content hash
+  Decisions: LWW Map - merge by key, newest timestamp wins
+  Checkpoints: Grow-only List - concatenate, sort by timestamp
+  Open_Questions: Grow-only Set - union, dedupe exact matches

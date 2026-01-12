@@ -1,0 +1,102 @@
+---
+session: continuity-system
+date: 2026-01-11
+status: complete
+outcome: SUCCEEDED
+---
+
+goal: Refactored bloated hooks (1058→162 lines, -85%) before Ledger Synthesis implementation
+now: Have expert review agent check refactored hooks, then implement Phase 1 Event Writer
+test: wc -l ~/.claude/hooks/src/session-start-continuity.ts ~/.claude/hooks/src/session-end-cleanup.ts  # Should show ~108 + ~54 = ~162 total
+
+done_this_session:
+  - task: Resumed from refactor-before-synthesis handoff
+    files: [thoughts/shared/handoffs/continuity-system/2026-01-11_07-00_refactor-before-synthesis.yaml]
+  - task: Initialized beads database for tracking
+    files: [.beads/beads.db]
+  - task: Refactored session-start-continuity.ts (629→108 lines, -83%)
+    files: [~/.claude/hooks/src/session-start-continuity.ts]
+  - task: Refactored session-end-cleanup.ts (429→54 lines, -87%)
+    files: [~/.claude/hooks/src/session-end-cleanup.ts]
+  - task: Converted tests to Vitest, removed UUID isolation tests
+    files: [~/.claude/hooks/src/__tests__/extractLedgerSection.test.ts, ~/.claude/hooks/src/__tests__/findSessionHandoff.test.ts, ~/.claude/hooks/src/__tests__/mainHandoffFirst.test.ts]
+
+blockers: []
+
+questions:
+  - Agent ID source for event filenames still undefined (plan references {timestamp}_{agent-id}.md)
+
+decisions:
+  remove_uuid_isolation: "Removed 92 lines of UUID isolation functions - over-engineered, not used"
+  remove_learning_extractor: "Memory system moved to --learn flag, spawning background extractor no longer needed"
+  remove_checkpoint_system: "63 lines of checkpoint creation rarely triggered, not core functionality"
+  remove_braintrust_legacy: "BRAINTRUST_API_KEY code path unused"
+  remove_legacy_ledger_fallback: "thoughts/ledgers/CONTINUITY_CLAUDE-*.md path deprecated"
+
+findings:
+  hooks_bloat_origin: "100% AI-generated in single 'Initial release' commit - no organic growth"
+  north_star_applied: "Applied 'What would Apple do?' principle - lean, DRY code"
+  test_conversion: "Tests needed conversion from Jest to Vitest (hooks project uses Vitest)"
+
+worked:
+  - Kraken agent for systematic refactoring with clear removal/keep criteria
+  - Beads for tracking individual refactoring tasks
+  - TodoWrite for progress visibility
+
+failed: []
+
+next:
+  - Have expert review agent (judge or critic) check refactored hooks for correctness
+  - Verify hooks work in actual Claude Code session (start new session, check ledger loads)
+  - Implement Phase 1 Event Writer (session-end writes events instead of updating current.md)
+  - Implement Phase 2 Synthesizer (new component)
+  - Integrate with session-start (Phase 3)
+
+files:
+  created:
+    - .beads/beads.db
+    - thoughts/shared/handoffs/continuity-system/2026-01-11_07-36_hooks-refactored.yaml
+  modified:
+    - ~/.claude/hooks/src/session-start-continuity.ts
+    - ~/.claude/hooks/src/session-end-cleanup.ts
+    - ~/.claude/hooks/src/__tests__/extractLedgerSection.test.ts
+    - ~/.claude/hooks/src/__tests__/findSessionHandoff.test.ts
+    - ~/.claude/hooks/src/__tests__/mainHandoffFirst.test.ts
+
+refactoring_summary:
+  session_start:
+    before: 629
+    after: 108
+    reduction: 83%
+    removed:
+      - UUID isolation functions (buildHandoffDirName, parseHandoffDirName, findSessionHandoffWithUUID)
+      - Token estimation (getSizeInfo)
+      - Learning extraction display (getLastExtraction, formatPreviousLearnings)
+      - Legacy ledger pruning (pruneLedger)
+      - Complex getLatestHandoff with task-*/auto-handoff-* parsing
+      - SQLite queries for unmarked handoffs (getUnmarkedHandoffs)
+    kept:
+      - extractLedgerSection()
+      - findSessionHandoff()
+      - findMostRecentLedger()
+      - main() and readStdin()
+  session_end:
+    before: 429
+    after: 54
+    reduction: 87%
+    removed:
+      - Dual lock patterns (isExtractorRunning, isLearningExtractorRunning, createExtractorLock, createLearningExtractorLock)
+      - Context percentage reading (readContextPercentage)
+      - Checkpoint creation (createCheckpoint, getSessionName)
+      - Learning extractor spawn (spawnLearningExtractor)
+      - Braintrust legacy code
+      - Agent cache cleanup
+    kept:
+      - updateLedgerTimestamp()
+      - main() and readStdin()
+
+beads_closed:
+  - Continuous-Claude-v3-cd5: "Refactor session-start-continuity.ts - Completed: 629→108 lines (-83%)"
+  - Continuous-Claude-v3-c2f: "Refactor session-end-cleanup.ts - Completed: 429→54 lines (-87%)"
+
+plan_reference: thoughts/shared/plans/2026-01-11-ledger-synthesis-system.md

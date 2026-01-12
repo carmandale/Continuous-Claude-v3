@@ -1,0 +1,89 @@
+---
+session: continuity-system
+date: 2026-01-11
+status: partial
+outcome: SUCCEEDED
+---
+
+goal: Refined synthesis timing via Oracle, discovered hooks need refactor before implementation
+now: Refactor session-start-continuity.ts from 630 to ~80 lines, then session-end-cleanup.ts from 430 to ~60 lines
+test: wc -l ~/.claude/hooks/src/session-start-continuity.ts  # Should be ~80
+
+done_this_session:
+  - task: Resumed from ledger-synthesis-research handoff
+    files: [thoughts/shared/handoffs/continuity-system/2026-01-11_05-07_ledger-synthesis-research.yaml]
+  - task: Clarified open questions via interview (git-tracking, retention, triggers)
+    files: []
+  - task: Consulted Oracle GPT-5.2 Pro on synthesis timing strategy (12+ min)
+    files: []
+  - task: Updated plan with Oracle's comprehensive timing recommendations
+    files: [thoughts/shared/plans/2026-01-11-ledger-synthesis-system.md]
+  - task: Ran deep premortem, identified 2 HIGH + 2 MEDIUM tigers
+    files: []
+  - task: Discovered hooks are massively bloated - 1,060 lines that should be ~140
+    files: [~/.claude/hooks/src/session-start-continuity.ts, ~/.claude/hooks/src/session-end-cleanup.ts]
+
+blockers: []
+
+questions:
+  - Agent ID source for event filenames - use session ID hash (8 chars)?
+
+decisions:
+  git_tracked: current.md will be git-tracked, committed on session_end and handoff
+  retention_config: Configurable event retention, default 7 days
+  synthesis_timing: "Generate often (start + after event write), commit strategically (end/handoff), enforce at integration (CI --check)"
+  refactor_first: Must clean up bloated hooks before adding synthesis complexity
+
+findings:
+  oracle_timing_strategy: "Two-tier - generate often, commit strategically, enforce at integration"
+  hooks_are_bloated: "session-start: 630 lines (should be ~80), session-end: 430 lines (should be ~60)"
+  bloat_origin: "100% AI-generated in single 'Initial release' commit - no organic growth"
+  north_star_violation: "Hooks violate 'no AI code bloat' and 'what would Apple do' principles"
+
+worked:
+  - Oracle CLI (oracle --prompt --file --slug) for deep architectural research
+  - AskUserQuestion for clarifying design decisions interactively
+  - Premortem skill for systematic risk identification
+
+failed: []
+
+next:
+  - Refactor session-start-continuity.ts to ~80 lines (lean, DRY, Apple-style)
+  - Refactor session-end-cleanup.ts to ~60 lines
+  - Then implement Phase 1 Event writer on clean foundation
+  - Then implement Phase 2 Synthesizer
+  - Then integrate with cleaned session-start
+
+files:
+  created:
+    - thoughts/shared/handoffs/continuity-system/2026-01-11_07-00_refactor-before-synthesis.yaml
+  modified:
+    - thoughts/shared/plans/2026-01-11-ledger-synthesis-system.md
+
+oracle_synthesis_strategy: |
+  1. Session start: always synthesize (no commit)
+  2. After event write: synthesize immediately (no commit)
+  3. Session end/handoff: synthesize + commit
+  4. Checkpoint: synthesize, throttle commits to 30 min
+  5. Pre-push/CI: validate current.md == synth(events), fail if stale
+
+  Merge strategy: Pattern A (require branch up-to-date + CI check)
+  Implementation details: per-stream .synth.lock, deterministic ordering, metadata footer
+
+premortem_tigers:
+  high:
+    - "Agent ID source undefined - plan references {timestamp}_{agent-id}.md but no agent ID concept in hooks"
+    - "Hooks are bloated - need refactor before adding synthesis"
+  medium:
+    - "Session-start integration complexity - 630 lines with complex fallback logic"
+    - "CI check implementation undefined - no workflow changes specified"
+
+hook_refactor_targets:
+  session_start:
+    current_lines: 630
+    target_lines: 80
+    remove: "UUID isolation functions (88 lines), duplicate fs patterns, nested loops, over-engineered fallbacks"
+  session_end:
+    current_lines: 430
+    target_lines: 60
+    remove: "Redundant lock patterns, checkpoint complexity, legacy braintrust code"

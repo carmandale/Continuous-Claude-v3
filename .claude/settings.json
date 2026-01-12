@@ -109,7 +109,6 @@
         ]
       },
       {
-        "matcher": "resume|compact|clear",
         "hooks": [
           {
             "type": "command",

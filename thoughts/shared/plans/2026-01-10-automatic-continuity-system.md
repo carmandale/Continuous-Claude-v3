@@ -301,6 +301,35 @@ Or for low context:
 | Prompt before checkpoint? | **No** - inform + continue, no blocking prompt |
 | Track checkpoints in git? | TBD - probably yes for visibility |
 
+## Risk Mitigations (Pre-Mortem 2026-01-10)
+
+### Tigers Addressed:
+
+1. **Context % file path mismatch** (MEDIUM)
+   - Problem: Plan used hardcoded `/tmp/` but macOS uses `/var/folders/.../T/`
+   - Mitigation: Use `os.tmpdir()` (Node) or `tempfile.gettempdir()` (Python) consistently
+   - Added to: Phase 2 implementation
+
+2. **sentence-transformers not installed** (MEDIUM)
+   - Problem: Embedding dependency missing in opc environment
+   - Mitigation: Install sentence-transformers before implementation
+   - Command: `cd opc && uv add sentence-transformers`
+
+### Elephants Addressed:
+
+1. **Two SessionEnd hooks conflict** (MEDIUM)
+   - Problem: New session-end-comprehensive.ts would run alongside existing session-end-cleanup.ts
+   - Decision: **MERGE** - Extend session-end-cleanup.ts instead of creating new hook
+   - Rationale: Single hook prevents ledger update conflicts, reuses existing lock file pattern
+   - Change: Modify `$HOME/.claude/hooks/src/session-end-cleanup.ts` to add checkpoint + background extraction
+
+### Pre-Mortem Summary:
+- Date: 2026-01-10
+- Mode: deep
+- Tigers: 2 (addressed)
+- Elephants: 1 (addressed)
+- Paper Tigers: 3 (verified not actual risks)
+
 ## References
 
 - Existing continuity hook: `.claude/hooks/src/session-start-continuity.ts`
