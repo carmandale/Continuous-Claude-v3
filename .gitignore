@@ -142,3 +142,6 @@ opc/README.md
 opc/LICENSE
 opc/.git/
 opc/.python-version
+
+# bv (beads viewer) local config and caches
+.bv/

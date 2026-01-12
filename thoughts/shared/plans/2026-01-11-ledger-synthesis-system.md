@@ -94,7 +94,7 @@ checkpoints:
 - [x] No direct modification of `current.md`
 - [x] Build passes
 
-### Phase 2: Synthesizer (new component)
+### Phase 2: Synthesizer (new component) ✅ COMPLETE
 
 **Files:**
 - `$HOME/.claude/hooks/src/synthesize-ledgers.ts` - Core logic
@@ -117,12 +117,13 @@ function synthesize(eventsDir: string): Ledger {
 ```
 
 **Acceptance:**
-- [ ] Synthesizer reads all event files from directory
-- [ ] Applies correct merge semantics per section
-- [ ] Outputs valid `current.md` format
-- [ ] Handles empty/malformed events gracefully
+- [x] Synthesizer reads all event files from directory
+- [x] Applies correct merge semantics per section
+- [x] Outputs valid `current.md` format
+- [x] Handles empty/malformed events gracefully
+- [x] 22 unit tests pass
 
-### Phase 3: SessionStart Integration
+### Phase 3: SessionStart Integration ✅ COMPLETE
 
 **File:** `.claude/hooks/src/session-start-continuity.ts`
 
@@ -144,7 +145,7 @@ function synthesize(eventsDir: string): Ledger {
 ━━━━━━━━━━━━━━━━━━━━━
 ```
 
-### Phase 4: Interactive Skill
+### Phase 4: Interactive Skill ✅ COMPLETE
 
 **File:** `$HOME/.claude/skills/synthesize-ledgers/SKILL.md`
 
@@ -158,7 +159,7 @@ function synthesize(eventsDir: string): Ledger {
 5. Optionally archive source events
 6. Optionally commit
 
-### Phase 5: CLI Tool
+### Phase 5: CLI Tool ✅ COMPLETE
 
 **File:** `$HOME/.claude/scripts/cc-synthesize`
 
@@ -168,18 +169,32 @@ cc-synthesize                           # Interactive
 cc-synthesize --no-confirm              # Automation
 cc-synthesize --input "events/*.md"     # Custom input
 cc-synthesize --archive --commit        # Full workflow
+cc-synthesize --check                   # CI mode - fail if stale
 ```
 
-### Phase 6: Gas Town Integration
+### Phase 6: Gas Town Integration (DEFERRED)
 
-**Integration point:** `gt refine` command
+**Integration point:** `gt refinery` command
 
+**Status:** Deferred - requires modification to compiled `gt` binary (Go source not available in this workspace)
+
+**Proposed Integration:**
 ```bash
-# In refinery workflow:
+# In refinery workflow, before merging polecat work:
 cc-synthesize --no-confirm --commit
 ```
 
-The refinery role invokes synthesis as part of its merge process.
+**Workaround:** Until Gas Town integration is implemented:
+1. Use `cc-synthesize` manually before `gt refinery` merge operations
+2. Or add a pre-merge hook script that calls `cc-synthesize`
+
+**Implementation Notes:**
+- `gt` is a compiled Go binary at `~/bin/gt`
+- Gas Town config is at `~/.config/gastown/`
+- Refinery manages merge queue via `gt refinery` (alias `gt ref`)
+- Would need to either:
+  - Modify Go source to call `cc-synthesize` during refinery merge
+  - Add hook mechanism to Gas Town refinery workflow
 
 ## Files to Create/Modify
 
