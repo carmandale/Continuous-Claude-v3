@@ -3,6 +3,35 @@ import * as fs from "fs";
 import * as path from "path";
 import { spawn, execSync } from "child_process";
 import Database from "better-sqlite3";
+
+// src/shared/opc-path.ts
+import { existsSync } from "fs";
+import { join } from "path";
+function getOpcDir() {
+  const envOpcDir = process.env.CLAUDE_OPC_DIR;
+  if (envOpcDir && existsSync(envOpcDir)) {
+    return envOpcDir;
+  }
+  const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  const localOpc = join(projectDir, "opc");
+  if (existsSync(localOpc)) {
+    return localOpc;
+  }
+  const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+  if (homeDir) {
+    const globalClaude = join(homeDir, ".claude");
+    const globalScripts = join(globalClaude, "scripts", "core");
+    if (existsSync(globalScripts)) {
+      return globalClaude;
+    }
+  }
+  return null;
+}
+
+// src/handoff-index.ts
+function getCoordinationSessionId(inputSessionId) {
+  return process.env.BRAINTRUST_SPAN_ID?.slice(0, 8) || inputSessionId;
+}
 function getPpid(pid) {
   if (process.platform === "win32") {
     try {
@@ -67,12 +96,16 @@ function storeSessionAffinity(projectDir, terminalPid, sessionName) {
   }
 }
 function extractSessionName(filePath) {
-  const parts = filePath.split("/");
+  const parts = filePath.split(/[/\\]/);
   const handoffsIdx = parts.findIndex((p) => p === "handoffs");
   if (handoffsIdx >= 0 && handoffsIdx < parts.length - 1) {
     return parts[handoffsIdx + 1];
   }
   return null;
+}
+function isHandoffArtifact(filePath) {
+  const normalized = filePath.replace(/\\/g, "/");
+  return normalized.includes("thoughts/shared/handoffs/") && (normalized.endsWith(".md") || normalized.endsWith(".yaml") || normalized.endsWith(".yml"));
 }
 async function main() {
   const input = JSON.parse(await readStdin());
@@ -83,7 +116,7 @@ async function main() {
     return;
   }
   const filePath = input.tool_input?.file_path || "";
-  if (!filePath.includes("handoffs") || !filePath.endsWith(".md")) {
+  if (!isHandoffArtifact(filePath)) {
     console.log(JSON.stringify({ result: "continue" }));
     return;
   }
@@ -93,8 +126,8 @@ async function main() {
       console.log(JSON.stringify({ result: "continue" }));
       return;
     }
+    const ext = path.extname(fullPath).toLowerCase();
     let content = fs.readFileSync(fullPath, "utf-8");
-    let modified = false;
     const hasFrontmatter = content.startsWith("---");
     const hasRootSpanId = content.includes("root_span_id:");
     if (!hasRootSpanId) {
@@ -122,8 +155,7 @@ ${content}`;
           const tempPath = fullPath + ".tmp";
           fs.writeFileSync(tempPath, content);
           fs.renameSync(tempPath, fullPath);
-          modified = true;
-        } catch (stateErr) {
+        } catch {
         }
       }
     }
@@ -132,17 +164,26 @@ ${content}`;
     if (terminalPid && sessionName) {
       storeSessionAffinity(projectDir, terminalPid, sessionName);
     }
-    const indexScript = path.join(projectDir, "scripts", "artifact_index.py");
-    if (fs.existsSync(indexScript)) {
-      const child = spawn("uv", ["run", "python", indexScript, "--file", fullPath], {
-        cwd: projectDir,
-        detached: true,
-        stdio: "ignore"
-      });
-      child.unref();
+    const opcDir = getOpcDir();
+    if (opcDir) {
+      const coordinationSessionId = getCoordinationSessionId(input.session_id);
+      const ingest = spawn(
+        "uv",
+        ["run", "python", "scripts/core/handoff_ingest.py", "--file", fullPath, "--session-id", coordinationSessionId],
+        { cwd: opcDir, detached: true, stdio: "ignore" }
+      );
+      ingest.unref();
+      if (ext === ".md") {
+        const indexer = spawn(
+          "uv",
+          ["run", "python", "scripts/core/artifact_index.py", "--file", fullPath],
+          { cwd: opcDir, detached: true, stdio: "ignore" }
+        );
+        indexer.unref();
+      }
     }
     console.log(JSON.stringify({ result: "continue" }));
-  } catch (err) {
+  } catch {
     console.log(JSON.stringify({ result: "continue" }));
   }
 }
