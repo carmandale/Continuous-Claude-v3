@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, execSync } from 'child_process';
 import Database from 'better-sqlite3';
+import { getOpcDir } from './shared/opc-path.js';
 
 interface PostToolUseInput {
   session_id: string;
@@ -26,6 +27,10 @@ interface BraintrustState {
   project_id: string;
   current_turn_span_id: string;
   turn_count: string;
+}
+
+function getCoordinationSessionId(inputSessionId: string): string {
+  return process.env.BRAINTRUST_SPAN_ID?.slice(0, 8) || inputSessionId;
 }
 
 /**
@@ -119,15 +124,21 @@ function storeSessionAffinity(projectDir: string, terminalPid: number, sessionNa
 
 /**
  * Extract session name from handoff file path.
- * Path format: .../handoffs/<session-name>/handoff-XXX.md
+ * Path format: .../handoffs/<session-name>/...
  */
 function extractSessionName(filePath: string): string | null {
-  const parts = filePath.split('/');
+  const parts = filePath.split(/[/\\]/);
   const handoffsIdx = parts.findIndex(p => p === 'handoffs');
   if (handoffsIdx >= 0 && handoffsIdx < parts.length - 1) {
     return parts[handoffsIdx + 1];
   }
   return null;
+}
+
+function isHandoffArtifact(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, '/');
+  return normalized.includes('thoughts/shared/handoffs/') &&
+    (normalized.endsWith('.md') || normalized.endsWith('.yaml') || normalized.endsWith('.yml'));
 }
 
 async function main() {
@@ -143,8 +154,8 @@ async function main() {
 
   const filePath = input.tool_input?.file_path || '';
 
-  // Only process handoff files
-  if (!filePath.includes('handoffs') || !filePath.endsWith('.md')) {
+  // Only process canonical handoff artifacts (thoughts/shared/handoffs/**/*.{yaml,yml,md})
+  if (!isHandoffArtifact(filePath)) {
     console.log(JSON.stringify({ result: 'continue' }));
     return;
   }
@@ -157,17 +168,17 @@ async function main() {
       return;
     }
 
+    const ext = path.extname(fullPath).toLowerCase();
+
     // Read current file content
     let content = fs.readFileSync(fullPath, 'utf-8');
-    let modified = false;
 
     // Check if frontmatter already has root_span_id
     const hasFrontmatter = content.startsWith('---');
     const hasRootSpanId = content.includes('root_span_id:');
 
-    // If missing root_span_id, try to inject it
+    // If missing root_span_id, try to inject it (YAML or Markdown frontmatter)
     if (!hasRootSpanId) {
-      // Read Braintrust state file
       const stateFile = path.join(homeDir, '.claude', 'state', 'braintrust_sessions', `${input.session_id}.json`);
 
       if (fs.existsSync(stateFile)) {
@@ -182,10 +193,8 @@ async function main() {
           ].join('\n');
 
           if (hasFrontmatter) {
-            // Insert after opening ---
             content = content.replace(/^---\n/, `---\n${newFields}\n`);
           } else {
-            // Add frontmatter at the start
             content = `---\n${newFields}\n---\n\n${content}`;
           }
 
@@ -193,9 +202,8 @@ async function main() {
           const tempPath = fullPath + '.tmp';
           fs.writeFileSync(tempPath, content);
           fs.renameSync(tempPath, fullPath);
-          modified = true;
-        } catch (stateErr) {
-          // State file missing or invalid - continue without IDs
+        } catch {
+          // State file missing/invalid - continue without IDs
         }
       }
     }
@@ -207,20 +215,31 @@ async function main() {
       storeSessionAffinity(projectDir, terminalPid, sessionName);
     }
 
-    // Always trigger indexing (idempotent, will upsert)
-    const indexScript = path.join(projectDir, 'scripts', 'artifact_index.py');
+    // Ingest into Postgres Coordination DB (idempotent upsert)
+    const opcDir = getOpcDir();
+    if (opcDir) {
+      const coordinationSessionId = getCoordinationSessionId(input.session_id);
 
-    if (fs.existsSync(indexScript)) {
-      const child = spawn('uv', ['run', 'python', indexScript, '--file', fullPath], {
-        cwd: projectDir,
-        detached: true,
-        stdio: 'ignore'
-      });
-      child.unref();
+      const ingest = spawn(
+        'uv',
+        ['run', 'python', 'scripts/core/handoff_ingest.py', '--file', fullPath, '--session-id', coordinationSessionId],
+        { cwd: opcDir, detached: true, stdio: 'ignore' }
+      );
+      ingest.unref();
+
+      // Optional: keep legacy SQLite artifact index in sync for Markdown handoffs
+      if (ext === '.md') {
+        const indexer = spawn(
+          'uv',
+          ['run', 'python', 'scripts/core/artifact_index.py', '--file', fullPath],
+          { cwd: opcDir, detached: true, stdio: 'ignore' }
+        );
+        indexer.unref();
+      }
     }
 
     console.log(JSON.stringify({ result: 'continue' }));
-  } catch (err) {
+  } catch {
     // Don't block on errors
     console.log(JSON.stringify({ result: 'continue' }));
   }
