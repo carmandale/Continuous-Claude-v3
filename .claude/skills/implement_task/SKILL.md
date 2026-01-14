@@ -284,7 +284,7 @@ Task(
 
 Your handoffs will accumulate:
 ```
-thoughts/handoffs/<session>/
+thoughts/shared/handoffs/events/
 ├── task-01-setup-schema.md
 ├── task-02-create-endpoints.md
 ├── task-03-add-validation.md      ← You create this

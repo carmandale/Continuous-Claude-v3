@@ -284,7 +284,7 @@ SessionStart                    Working                      SessionEnd
            │                           │ 3. PRE-COMPACT     │
            │                           │                    │
            │                           │  Auto-handoff ─────┼──▶ thoughts/shared/
-           │                           │  (YAML format)     │    handoffs/*.yaml
+           │                           │  (YAML format)     │    handoffs/events/*.md
            │                           │  Dirty > 20? ──────┼──▶ TLDR re-index
            │                           │                    │
            │                           └────────────────────┘
@@ -390,7 +390,7 @@ SessionStart                    Working                      SessionEnd
 │                                          │ ├── ledgers/           │         │
 │                                          │ │   └── CONTINUITY_*.md│         │
 │                                          │ └── shared/            │         │
-│                                          │     ├── handoffs/*.yaml│         │
+│                                          │     ├── handoffs/events/*.md│   │
 │                                          │     └── plans/*.md     │         │
 │                                          │                        │         │
 │                                          │ .tldr/                 │         │
@@ -771,27 +771,38 @@ Implement feature X with proper error handling
 
 #### Handoffs
 
-Between-session knowledge transfer. Location: `thoughts/shared/handoffs/<session>/`
+Between-session knowledge transfer. Location: `thoughts/shared/handoffs/events/`
+
+All artifacts (checkpoint, handoff, finalize) use the same unified format and are stored in `thoughts/shared/handoffs/events/` with timestamped filenames like `2026-01-14T00-54-26.972Z_77ef540c.md`.
 
 ```yaml
 ---
-date: 2026-01-08T15:26:01+0000
-session_name: feature-x
-status: complete
+schema_version: "1.0.0"
+event_type: handoff
+timestamp: 2026-01-14T00:54:26.972Z
+session_id: 77ef540c
 ---
 
-# Handoff: Feature X Implementation
+# Session Handoff
 
-## Task(s)
-| Task | Status |
-|------|--------|
-| Design API | Completed |
-| Implement core | Completed |
-| Error handling | Pending |
+## Goal
+Feature X implementation with proper error handling
+
+## Current Status
+Implemented core logic, error handling remains
+
+## Completed This Session
+- task: Design API schema
+  files: [api/schema.py, api/types.py]
+- task: Implement core logic
+  files: [core/processor.py]
 
 ## Next Steps
 1. Add retry logic to API calls
 2. Write integration tests
+
+## Outcome
+PARTIAL_PLUS
 ```
 
 #### Commands
@@ -1061,7 +1072,8 @@ continuous-claude/
 ├── thoughts/
 │   ├── ledgers/          # Continuity ledgers (CONTINUITY_*.md)
 │   └── shared/
-│       ├── handoffs/     # Session handoffs (*.yaml)
+│       ├── handoffs/
+│       │   └── events/   # All artifacts: checkpoint, handoff, finalize (*.md)
 │       └── plans/        # Implementation plans
 └── docs/                 # Documentation
 ```

@@ -173,7 +173,7 @@ Handoffs persist on disk. If compaction happens, you re-read handoffs and contin
 
 1. **Create handoff directory:**
    ```bash
-   mkdir -p thoughts/handoffs/<session-name>
+   mkdir -p thoughts/shared/handoffs/events
    ```
    Use the session name from your continuity ledger.
 
@@ -189,7 +189,7 @@ Before implementing, ensure the plan has been validated using the `validate-agen
 
 **Check for validation handoff:**
 ```bash
-ls thoughts/handoffs/<session>/validation-*.md
+ls thoughts/shared/handoffs/events/validation-*.md
 ```
 
 If no validation exists, suggest running validation first:
@@ -206,7 +206,7 @@ For each task in the plan:
 1. **Prepare agent context:**
    - Read continuity ledger (current state)
    - Read the plan (overall context)
-   - Read previous handoff if exists (from thoughts/handoffs/<session>/)
+   - Read previous handoff if exists (from thoughts/shared/handoffs/events/)
    - Identify the specific task
 
 2. **Spawn implementation agent:**
@@ -234,7 +234,7 @@ For each task in the plan:
      [Paste previous task's handoff content, or "This is the first task - no previous handoff"]
 
      ### Handoff Directory:
-     thoughts/handoffs/<session-name>/
+     thoughts/shared/handoffs/events/
 
      ### Handoff Filename:
      task-[NN]-[short-description].md
@@ -264,7 +264,7 @@ If auto-compact happens mid-orchestration:
 1. Read continuity ledger (loaded by SessionStart hook)
 2. List handoff directory:
    ```bash
-   ls -la thoughts/handoffs/<session-name>/
+   ls -la thoughts/shared/handoffs/events/
    ```
 3. Read the last handoff to understand where you were
 4. Continue spawning agents from next uncompleted task
@@ -277,19 +277,19 @@ User: /implement_plan thoughts/shared/plans/PLAN-add-auth.md
 Claude: I'll use agent orchestration for this plan (6 tasks).
 
 Setting up handoff directory...
-[Creates thoughts/handoffs/add-auth/]
+[Creates thoughts/shared/handoffs/events/]
 
 Task 1 of 6: Create user model
 [Spawns agent with full context]
 [Agent completes, creates task-01-user-model.md]
 
-✅ Task 1 complete. Handoff: thoughts/handoffs/add-auth/task-01-user-model.md
+✅ Task 1 complete. Handoff: thoughts/shared/handoffs/events/task-01-user-model.md
 
 Task 2 of 6: Add authentication middleware
 [Spawns agent with previous handoff]
 [Agent completes, creates task-02-auth-middleware.md]
 
-✅ Task 2 complete. Handoff: thoughts/handoffs/add-auth/task-02-auth-middleware.md
+✅ Task 2 complete. Handoff: thoughts/shared/handoffs/events/task-02-auth-middleware.md
 
 --- AUTO COMPACT HAPPENS ---
 [Context compressed, but handoffs persist]

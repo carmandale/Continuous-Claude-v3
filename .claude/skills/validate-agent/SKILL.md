@@ -225,7 +225,7 @@ Task(
   thoughts/shared/plans/PLAN-feature-name.md
 
   ### Handoff Directory:
-  thoughts/handoffs/<session>/
+  thoughts/shared/handoffs/events/
 
   ---
 
