@@ -269,7 +269,7 @@ Task(
   [Content of task-02-*.md or "This is the first task"]
 
   ### Handoff Directory:
-  thoughts/shared/handoffs/events/
+  thoughts/shared/handoffs/<session>/
 
   ---
 
@@ -284,7 +284,7 @@ Task(
 
 Your handoffs will accumulate:
 ```
-thoughts/shared/handoffs/events/
+thoughts/shared/handoffs/<session>/
 ├── task-01-setup-schema.md
 ├── task-02-create-endpoints.md
 ├── task-03-add-validation.md      ← You create this

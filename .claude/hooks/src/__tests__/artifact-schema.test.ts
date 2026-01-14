@@ -32,17 +32,17 @@ describe('Artifact Schema', () => {
         'Test now',
         'PARTIAL_PLUS',
         {
-          session_name: 'test-session',
+          session: 'test-session',
         }
       );
 
       expect(artifact.schema_version).toBe('1.0.0');
-      expect(artifact.event_type).toBe('checkpoint');
+      expect(artifact.mode).toBe('checkpoint');
       expect(artifact.goal).toBe('Test goal');
       expect(artifact.now).toBe('Test now');
       expect(artifact.outcome).toBe('PARTIAL_PLUS');
-      expect(artifact.session_name).toBe('test-session');
-      expect(artifact.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(artifact.session).toBe('test-session');
+      expect(artifact.date).toMatch(/^\d{4}-\d{2}-\d{2}/);
     });
 
     it('should create valid handoff artifact with bead', () => {
@@ -52,12 +52,12 @@ describe('Artifact Schema', () => {
         'Test now',
         'SUCCEEDED',
         {
-          session_name: 'test-session',
+          session: 'test-session',
           primary_bead: 'beads-123',
         }
       );
 
-      expect(artifact.event_type).toBe('handoff');
+      expect(artifact.mode).toBe('handoff');
       expect((artifact as HandoffArtifact).primary_bead).toBe('beads-123');
     });
 
@@ -68,19 +68,19 @@ describe('Artifact Schema', () => {
         'Test now',
         'SUCCEEDED',
         {
-          session_name: 'test-session',
+          session: 'test-session',
           primary_bead: 'beads-456',
         }
       );
 
-      expect(artifact.event_type).toBe('finalize');
+      expect(artifact.mode).toBe('finalize');
       expect((artifact as FinalizeArtifact).primary_bead).toBe('beads-456');
     });
 
     it('should throw error when handoff missing bead', () => {
       expect(() => {
         createArtifact('handoff', 'Test goal', 'Test now', 'SUCCEEDED', {
-          session_name: 'test-session',
+          session: 'test-session',
         });
       }).toThrow('Handoff artifacts require a primary_bead');
     });
@@ -88,22 +88,24 @@ describe('Artifact Schema', () => {
     it('should throw error when finalize missing bead', () => {
       expect(() => {
         createArtifact('finalize', 'Test goal', 'Test now', 'SUCCEEDED', {
-          session_name: 'test-session',
+          session: 'test-session',
         });
       }).toThrow('Finalize artifacts require a primary_bead');
     });
 
-    it('should accept custom timestamp', () => {
+    it('should accept custom date', () => {
       const customTime = '2026-01-13T10:00:00Z';
       const artifact = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED', {
-        timestamp: customTime,
+        session: 'test-session',
+        date: customTime,
       });
 
-      expect(artifact.timestamp).toBe(customTime);
+      expect(artifact.date).toBe(customTime);
     });
 
     it('should accept metadata', () => {
       const artifact = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED', {
+        session: 'test-session',
         metadata: {
           custom_field: 'value',
           nested: { foo: 'bar' },
@@ -119,13 +121,14 @@ describe('Artifact Schema', () => {
 
   describe('validateArtifact', () => {
     it('should validate valid checkpoint artifact', () => {
-      const artifact = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED');
+      const artifact = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED', { session: 'test-session' });
       expect(validateArtifact(artifact)).toBe(true);
     });
 
     it('should validate valid handoff artifact', () => {
       const artifact = createArtifact('handoff', 'Goal', 'Now', 'SUCCEEDED', {
         primary_bead: 'beads-123',
+        session: 'test-session',
       });
       expect(validateArtifact(artifact)).toBe(true);
     });
@@ -133,6 +136,7 @@ describe('Artifact Schema', () => {
     it('should validate valid finalize artifact', () => {
       const artifact = createArtifact('finalize', 'Goal', 'Now', 'SUCCEEDED', {
         primary_bead: 'beads-456',
+        session: 'test-session',
       });
       expect(validateArtifact(artifact)).toBe(true);
     });
@@ -153,8 +157,9 @@ describe('Artifact Schema', () => {
 
     it('should reject missing schema_version', () => {
       const invalid = {
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -162,10 +167,11 @@ describe('Artifact Schema', () => {
       expect(validateArtifact(invalid)).toBe(false);
     });
 
-    it('should reject missing event_type', () => {
+    it('should reject missing mode', () => {
       const invalid = {
         schema_version: '1.0.0',
-        timestamp: '2026-01-13T10:00:00Z',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -173,11 +179,12 @@ describe('Artifact Schema', () => {
       expect(validateArtifact(invalid)).toBe(false);
     });
 
-    it('should reject invalid event_type', () => {
+    it('should reject invalid mode', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'invalid',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'invalid',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -185,10 +192,11 @@ describe('Artifact Schema', () => {
       expect(validateArtifact(invalid)).toBe(false);
     });
 
-    it('should reject missing timestamp', () => {
+    it('should reject missing date', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
+        mode: 'checkpoint',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -199,8 +207,9 @@ describe('Artifact Schema', () => {
     it('should reject missing goal', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         now: 'Now',
         outcome: 'SUCCEEDED',
       };
@@ -210,8 +219,9 @@ describe('Artifact Schema', () => {
     it('should reject missing now', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         outcome: 'SUCCEEDED',
       };
@@ -221,8 +231,9 @@ describe('Artifact Schema', () => {
     it('should reject missing outcome', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
       };
@@ -232,8 +243,9 @@ describe('Artifact Schema', () => {
     it('should reject invalid outcome', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'INVALID',
@@ -244,8 +256,9 @@ describe('Artifact Schema', () => {
     it('should reject handoff without primary_bead', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'handoff',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'handoff',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -256,8 +269,9 @@ describe('Artifact Schema', () => {
     it('should reject finalize without primary_bead', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'finalize',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'finalize',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -268,7 +282,7 @@ describe('Artifact Schema', () => {
 
   describe('Type Guards', () => {
     it('should identify checkpoint artifacts', () => {
-      const checkpoint = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED');
+      const checkpoint = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED', { session: 'test-session' });
       expect(isCheckpoint(checkpoint)).toBe(true);
       expect(isHandoff(checkpoint)).toBe(false);
       expect(isFinalize(checkpoint)).toBe(false);
@@ -277,6 +291,7 @@ describe('Artifact Schema', () => {
     it('should identify handoff artifacts', () => {
       const handoff = createArtifact('handoff', 'Goal', 'Now', 'SUCCEEDED', {
         primary_bead: 'beads-123',
+        session: 'test-session',
       });
       expect(isCheckpoint(handoff)).toBe(false);
       expect(isHandoff(handoff)).toBe(true);
@@ -286,6 +301,7 @@ describe('Artifact Schema', () => {
     it('should identify finalize artifacts', () => {
       const finalize = createArtifact('finalize', 'Goal', 'Now', 'SUCCEEDED', {
         primary_bead: 'beads-456',
+        session: 'test-session',
       });
       expect(isCheckpoint(finalize)).toBe(false);
       expect(isHandoff(finalize)).toBe(false);
@@ -311,14 +327,14 @@ describe('Artifact Schema', () => {
     it('should support full checkpoint with all fields', () => {
       const checkpoint: CheckpointArtifact = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
         session_id: 'sess-123',
-        session_name: 'auth-refactor',
+        session: 'auth-refactor',
         goal: 'Implement user authentication',
         now: 'Writing JWT middleware',
         outcome: 'PARTIAL_PLUS',
-        this_session: [
+        done_this_session: [
           { task: 'Created auth module', files: ['src/auth/index.ts'] },
         ],
         next: ['Add logout endpoint', 'Write integration tests'],
@@ -327,10 +343,8 @@ describe('Artifact Schema', () => {
         decisions: {
           jwt_library: 'Chose jsonwebtoken for better docs',
         },
-        learnings: {
-          worked: ['TDD approach caught edge cases'],
-          failed: ['Token refresh too complex'],
-        },
+        worked: ['TDD approach caught edge cases'],
+        failed: ['Token refresh too complex'],
         findings: {
           root_cause: 'Session storage needed',
         },
@@ -356,9 +370,9 @@ describe('Artifact Schema', () => {
     it('should support full handoff with mode-specific fields', () => {
       const handoff: HandoffArtifact = {
         schema_version: '1.0.0',
-        event_type: 'handoff',
-        timestamp: '2026-01-13T15:00:00Z',
-        session_name: 'auth-refactor',
+        mode: 'handoff',
+        date: '2026-01-13T15:00:00Z',
+        session: 'auth-refactor',
         goal: 'Implement user authentication',
         now: 'Complete logout endpoint',
         outcome: 'PARTIAL_PLUS',
@@ -369,7 +383,7 @@ describe('Artifact Schema', () => {
           { path: 'tests/auth.test.ts', note: '15 new tests' },
         ],
         continuation_prompt: 'Continue with logout endpoint at POST /auth/logout',
-        this_session: [
+        done_this_session: [
           { task: 'Implemented JWT middleware', files: ['src/auth/jwt.ts'] },
         ],
         next: ['Implement logout endpoint'],
@@ -383,9 +397,9 @@ describe('Artifact Schema', () => {
     it('should support full finalize with final solutions', () => {
       const finalize: FinalizeArtifact = {
         schema_version: '1.0.0',
-        event_type: 'finalize',
-        timestamp: '2026-01-13T18:00:00Z',
-        session_name: 'auth-refactor',
+        mode: 'finalize',
+        date: '2026-01-13T18:00:00Z',
+        session: 'auth-refactor',
         goal: 'Implement user authentication',
         now: 'Session complete - all endpoints tested',
         outcome: 'SUCCEEDED',
@@ -426,7 +440,8 @@ describe('Artifact Schema', () => {
           'checkpoint',
           'Goal',
           'Now',
-          outcome as any
+          outcome as any,
+          { session: 'test-session' }
         );
         expect(validateArtifact(artifact)).toBe(true);
       });
@@ -436,6 +451,7 @@ describe('Artifact Schema', () => {
   describe('Extensibility', () => {
     it('should preserve metadata through validation', () => {
       const artifact = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED', {
+        session: 'test-session',
         metadata: {
           custom_field: 'value',
           integration_data: { foo: 'bar' },

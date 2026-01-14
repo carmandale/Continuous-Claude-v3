@@ -60,7 +60,7 @@ maestro decomposes into:
   - Validation states: PENDING → IN_PROGRESS → VALIDATED → FAILED
   - Writes tests before code
   - Refactors after green tests
-- **Checkpoints:** `thoughts/shared/handoffs/events/*.md` (latest artifact)
+- **Checkpoints:** `thoughts/shared/handoffs/*/*.yaml` (latest artifact)
 
 **Example:**
 ```
@@ -483,7 +483,7 @@ critic:
 - **Purpose:** Documentation, handoffs, session summaries, ledger management
 - **When to use:** Need to document work, create handoffs, update ledgers
 - **Creates:**
-  - Handoffs: `thoughts/shared/handoffs/events/*.md` (latest artifact)
+  - Handoffs: `thoughts/shared/handoffs/*/*.yaml` (latest artifact)
   - Ledgers: `thoughts/ledgers/CONTINUITY_CLAUDE-<session>.md`
   - Summaries: `.claude/cache/scribe/latest-summary.md`
 - **Follows:** create_handoff and continuity_ledger skill methodologies
@@ -726,7 +726,7 @@ kraken (implement) → review-agent (verify) → arbiter (test)
 
 ### Kraken checkpoint not found
 - **Cause:** Checkpoint file moved or renamed
-- **Fix:** Check latest artifact in `thoughts/shared/handoffs/events/`
+- **Fix:** Check latest artifact in `thoughts/shared/handoffs/*/*.yaml`
 
 ### Agent output file empty
 - **Cause:** Agent failed before writing output

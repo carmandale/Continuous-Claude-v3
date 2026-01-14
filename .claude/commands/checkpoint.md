@@ -8,7 +8,7 @@ This command uses the unified artifact generator: `~/.claude/scripts/cc-artifact
 
 ## Requirements
 - Bead is optional
-- Artifact must be written to `thoughts/shared/handoffs/events/`
+- Artifact must be written to `thoughts/shared/handoffs/<session>/`
 - Outcome is required
 - Auto-commit is required (checkpoint should be recorded)
 
@@ -22,16 +22,16 @@ If a bead is relevant, use it as `--bead`.
 
 ### 2) Generate the checkpoint artifact
 ```bash
-~/.claude/scripts/cc-artifact --mode checkpoint [--bead <BEAD_ID>]
+~/.claude/scripts/cc-artifact --mode checkpoint [--bead <BEAD_ID>] [--session-title "<short title>"]
 ```
-Fill in `goal`, `now`, and `outcome`. Add optional fields (`this_session`, `next`, `learnings`, etc.) as needed.
+Fill in `goal`, `now`, and `outcome`. Add optional fields (`done_this_session`, `next`, `worked`, `failed`, etc.) as needed.
 
 ### 3) Confirm outcome
 Ask the user for outcome (SUCCEEDED / PARTIAL_PLUS / PARTIAL_MINUS / FAILED) and ensure the artifact reflects it.
 
 ### 4) Commit the artifact
 ```bash
-git add thoughts/shared/handoffs/events/*.md
+git add thoughts/shared/handoffs/*/*.yaml
 git commit -m "checkpoint: <short description>"
 ```
 

@@ -6,7 +6,7 @@
  * 1. Scans .checkpoint/ and .handoff/ directories
  * 2. Parses old markdown format
  * 3. Converts to unified artifact schema
- * 4. Writes to thoughts/shared/handoffs/events/
+ * 4. Writes to thoughts/shared/handoffs/{session}/
  * 5. Validates converted artifacts
  *
  * Usage:
@@ -359,6 +359,32 @@ function generateSessionId(filename: string): string {
   return Math.abs(hash).toString(16).padStart(8, '0').slice(0, 8);
 }
 
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'session';
+}
+
+function deriveTitleFromFilename(filename: string): string {
+  const base = basename(filename).replace(/\.[^.]+$/, '');
+  const stripped = base
+    .replace(/^\d{4}-\d{2}-\d{2}[-_]\d{4,}-?/, '')
+    .replace(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:\.\d+Z)?_?/, '')
+    .replace(/^-+|-+$/g, '');
+  return stripped || base;
+}
+
+function buildSessionName(primaryBead: string | undefined, titleSource: string): string {
+  let source = titleSource;
+  if (primaryBead && source.startsWith(primaryBead)) {
+    source = source.slice(primaryBead.length).replace(/^[-\s]+/, '');
+  }
+  const slug = slugify(source);
+  return primaryBead ? `${primaryBead}-${slug}` : slug;
+}
+
 // =============================================================================
 // Conversion Functions
 // =============================================================================
@@ -367,28 +393,41 @@ function generateSessionId(filename: string): string {
  * Convert old checkpoint to unified format
  */
 function convertCheckpoint(oldData: OldCheckpointData, filename: string): CheckpointArtifact {
-  const timestamp = convertToISO(oldData.date);
+  const date = convertToISO(oldData.date);
   const sessionId = generateSessionId(filename);
+  const titleSource = oldData.goal || deriveTitleFromFilename(filename);
+  const session = buildSessionName(oldData.activeBead, titleSource);
+
+  const metadata: Record<string, unknown> = {
+    migrated_from: filename,
+    migration_timestamp: new Date().toISOString(),
+    original_format: 'checkpoint',
+  };
+
+  if (oldData.filesChanged) {
+    metadata.files_changed = oldData.filesChanged;
+  }
+  if (oldData.resumePrompt) {
+    metadata.resume_prompt = oldData.resumePrompt;
+  }
 
   const artifact: CheckpointArtifact = {
     schema_version: ARTIFACT_SCHEMA_VERSION,
-    event_type: 'checkpoint',
-    timestamp,
+    mode: 'checkpoint',
+    date,
+    session,
     session_id: sessionId,
     primary_bead: oldData.activeBead,
     goal: oldData.goal || 'Session work',
     now: oldData.accomplished.length > 0 ? oldData.accomplished.join('; ') : 'In progress',
     outcome: determineOutcome(oldData.accomplished, oldData.remaining, oldData.blockers),
-    this_session: oldData.accomplished.map(task => ({ task, files: [] })),
+    done_this_session: oldData.accomplished.map(task => ({ task, files: [] })),
     next: oldData.remaining,
     blockers: oldData.blockers,
     decisions: oldData.decisions,
-    learnings: oldData.patterns ? { worked: oldData.patterns } : undefined,
-    metadata: {
-      migrated_from: filename,
-      migration_timestamp: new Date().toISOString(),
-      original_format: 'checkpoint',
-    },
+    worked: oldData.patterns,
+    files: oldData.filesChanged ? { modified: Object.keys(oldData.filesChanged) } : undefined,
+    metadata,
   };
 
   return artifact;
@@ -398,8 +437,11 @@ function convertCheckpoint(oldData: OldCheckpointData, filename: string): Checkp
  * Convert old handoff to unified format
  */
 function convertHandoff(oldData: OldHandoffData, filename: string): HandoffArtifact {
-  const timestamp = convertToISO(oldData.date);
+  const date = convertToISO(oldData.date);
   const sessionId = generateSessionId(filename);
+  const primaryBead = oldData.primaryBead || 'unknown';
+  const titleSource = deriveTitleFromFilename(filename) || oldData.primaryBead || 'session';
+  const session = buildSessionName(primaryBead, titleSource);
 
   // Extract related bead IDs
   const relatedBeads = oldData.relatedBeads
@@ -408,19 +450,20 @@ function convertHandoff(oldData: OldHandoffData, filename: string): HandoffArtif
 
   const artifact: HandoffArtifact = {
     schema_version: ARTIFACT_SCHEMA_VERSION,
-    event_type: 'handoff',
-    timestamp,
+    mode: 'handoff',
+    date,
+    session,
     session_id: sessionId,
-    session_name: oldData.agent,
-    primary_bead: oldData.primaryBead || 'unknown',
+    primary_bead: primaryBead,
     related_beads: relatedBeads,
     goal: oldData.primaryBead || 'Session work',
     now: oldData.completed.length > 0 ? oldData.completed.join('; ') : 'Work in progress',
     outcome: determineOutcome(oldData.completed, oldData.nextUp || [], []),
-    this_session: oldData.completed.map(task => ({ task, files: [] })),
+    done_this_session: oldData.completed.map(task => ({ task, files: [] })),
     next: oldData.nextUp,
     decisions: oldData.decisions,
     continuation_prompt: oldData.continuationPrompt,
+    files: oldData.filesModified ? { modified: oldData.filesModified } : undefined,
     metadata: {
       migrated_from: filename,
       migration_timestamp: new Date().toISOString(),
@@ -505,9 +548,10 @@ async function migrateCheckpoints(baseDir: string, dryRun: boolean): Promise<{
       assertValidArtifact(artifact);
 
       if (dryRun) {
-        console.log(`  ✓ Would migrate to: ${artifact.timestamp}_${artifact.session_id}.md`);
+        const previewPath = await writeArtifact(artifact, { baseDir, dryRun: true });
+        console.log(`  ✓ Would migrate to: ${basename(previewPath)}`);
         console.log(`    Goal: ${artifact.goal.slice(0, 50)}...`);
-        console.log(`    Tasks: ${artifact.this_session?.length || 0}`);
+        console.log(`    Tasks: ${artifact.done_this_session?.length || 0}`);
       } else {
         const writtenPath = await writeArtifact(artifact, { baseDir });
         console.log(`  ✓ Migrated to: ${basename(writtenPath)}`);
@@ -567,9 +611,10 @@ async function migrateHandoffs(baseDir: string, dryRun: boolean): Promise<{
       assertValidArtifact(artifact);
 
       if (dryRun) {
-        console.log(`  ✓ Would migrate to: ${artifact.timestamp}_${artifact.session_id}.md`);
+        const previewPath = await writeArtifact(artifact, { baseDir, dryRun: true });
+        console.log(`  ✓ Would migrate to: ${basename(previewPath)}`);
         console.log(`    Bead: ${artifact.primary_bead}`);
-        console.log(`    Tasks: ${artifact.this_session?.length || 0}`);
+        console.log(`    Tasks: ${artifact.done_this_session?.length || 0}`);
       } else {
         const writtenPath = await writeArtifact(artifact, { baseDir });
         console.log(`  ✓ Migrated to: ${basename(writtenPath)}`);

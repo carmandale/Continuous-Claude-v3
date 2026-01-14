@@ -96,13 +96,6 @@ function storeSessionAffinity(projectDir, terminalPid, sessionName) {
   }
 }
 function extractSessionName(filePath) {
-  const filename = filePath.split(/[/\\]/).pop();
-  if (filename) {
-    const match = filename.match(/_([0-9a-f]{8})\.md$/);
-    if (match) {
-      return match[1];
-    }
-  }
   const parts = filePath.split(/[/\\]/);
   const handoffsIdx = parts.findIndex((p) => p === "handoffs");
   if (handoffsIdx >= 0 && handoffsIdx < parts.length - 1) {
@@ -126,10 +119,14 @@ function extractFrontmatter(content) {
     const match = line.match(/^(\w+):\s*(.+)$/);
     if (match) {
       const [, key, value] = match;
-      if (key === "event_type") {
-        metadata.event_type = value;
+      if (key === "mode") {
+        metadata.mode = value;
       } else if (key === "schema_version") {
         metadata.schema_version = value;
+      } else if (key === "session") {
+        metadata.session = value;
+      } else if (key === "primary_bead") {
+        metadata.primary_bead = value;
       } else if (key === "session_id") {
         metadata.session_id = value;
       } else if (key === "root_span_id") {
@@ -195,7 +192,7 @@ ${content}`;
       }
     }
     const terminalPid = getTerminalShellPid();
-    const sessionName = extractSessionName(fullPath);
+    const sessionName = frontmatter.session || extractSessionName(fullPath);
     if (terminalPid && sessionName) {
       storeSessionAffinity(projectDir, terminalPid, sessionName);
     }

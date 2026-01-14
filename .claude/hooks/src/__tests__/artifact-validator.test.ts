@@ -19,7 +19,7 @@ import {
 describe('Artifact Validator', () => {
   describe('validateArtifactSchema', () => {
     it('should validate valid checkpoint artifact', () => {
-      const artifact = createArtifact('checkpoint', 'Test goal', 'Test now', 'SUCCEEDED');
+      const artifact = createArtifact('checkpoint', 'Test goal', 'Test now', 'SUCCEEDED', { session: 'test-session' });
       const result = validateArtifactSchema(artifact);
 
       expect(result.valid).toBe(true);
@@ -29,6 +29,7 @@ describe('Artifact Validator', () => {
     it('should validate valid handoff artifact', () => {
       const artifact = createArtifact('handoff', 'Test goal', 'Test now', 'SUCCEEDED', {
         primary_bead: 'beads-123',
+        session: 'test-session',
       });
       const result = validateArtifactSchema(artifact);
 
@@ -39,6 +40,7 @@ describe('Artifact Validator', () => {
     it('should validate valid finalize artifact', () => {
       const artifact = createArtifact('finalize', 'Test goal', 'Test now', 'SUCCEEDED', {
         primary_bead: 'beads-456',
+        session: 'test-session',
       });
       const result = validateArtifactSchema(artifact);
 
@@ -79,8 +81,9 @@ describe('Artifact Validator', () => {
   describe('Required Fields', () => {
     it('should reject missing schema_version', () => {
       const invalid = {
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -92,10 +95,11 @@ describe('Artifact Validator', () => {
       expect(result.errors!.some(e => e.message.includes('schema_version'))).toBe(true);
     });
 
-    it('should reject missing event_type', () => {
+    it('should reject missing mode', () => {
       const invalid = {
         schema_version: '1.0.0',
-        timestamp: '2026-01-13T10:00:00Z',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -103,13 +107,14 @@ describe('Artifact Validator', () => {
       const result = validateArtifactSchema(invalid);
 
       expect(result.valid).toBe(false);
-      expect(result.errors!.some(e => e.message.includes('event_type'))).toBe(true);
+      expect(result.errors!.some(e => e.message.includes('mode'))).toBe(true);
     });
 
-    it('should reject missing timestamp', () => {
+    it('should reject missing date', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
+        mode: 'checkpoint',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -117,14 +122,15 @@ describe('Artifact Validator', () => {
       const result = validateArtifactSchema(invalid);
 
       expect(result.valid).toBe(false);
-      expect(result.errors!.some(e => e.message.includes('timestamp'))).toBe(true);
+      expect(result.errors!.some(e => e.message.includes('date'))).toBe(true);
     });
 
     it('should reject missing goal', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         now: 'Now',
         outcome: 'SUCCEEDED',
       };
@@ -137,8 +143,9 @@ describe('Artifact Validator', () => {
     it('should reject missing now', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         outcome: 'SUCCEEDED',
       };
@@ -151,8 +158,9 @@ describe('Artifact Validator', () => {
     it('should reject missing outcome', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
       };
@@ -164,11 +172,12 @@ describe('Artifact Validator', () => {
   });
 
   describe('Invalid Field Values', () => {
-    it('should reject invalid event_type', () => {
+    it('should reject invalid mode', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'invalid',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'invalid',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -186,8 +195,9 @@ describe('Artifact Validator', () => {
     it('should reject invalid outcome', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'INVALID',
@@ -201,8 +211,9 @@ describe('Artifact Validator', () => {
     it('should reject invalid schema_version format', () => {
       const invalid = {
         schema_version: 'not-semver',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -213,11 +224,12 @@ describe('Artifact Validator', () => {
       expect(result.errors!.some(e => e.field.includes('schema_version'))).toBe(true);
     });
 
-    it('should reject invalid timestamp format', () => {
+    it('should reject invalid date format', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: 'not-a-date',
+        mode: 'checkpoint',
+        date: 'not-a-date',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -225,14 +237,15 @@ describe('Artifact Validator', () => {
       const result = validateArtifactSchema(invalid);
 
       expect(result.valid).toBe(false);
-      expect(result.errors!.some(e => e.field.includes('timestamp'))).toBe(true);
+      expect(result.errors!.some(e => e.field.includes('date'))).toBe(true);
     });
 
     it('should reject empty goal', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: '',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -246,8 +259,9 @@ describe('Artifact Validator', () => {
     it('should reject empty now', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: '',
         outcome: 'SUCCEEDED',
@@ -263,8 +277,9 @@ describe('Artifact Validator', () => {
     it('should reject handoff without primary_bead', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'handoff',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'handoff',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -278,8 +293,9 @@ describe('Artifact Validator', () => {
     it('should reject finalize without primary_bead', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'finalize',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'finalize',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -293,8 +309,9 @@ describe('Artifact Validator', () => {
     it('should allow checkpoint without primary_bead', () => {
       const valid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -306,15 +323,16 @@ describe('Artifact Validator', () => {
   });
 
   describe('Complex Field Validation', () => {
-    it('should validate this_session array with tasks', () => {
+    it('should validate done_this_session array with tasks', () => {
       const artifact: CheckpointArtifact = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
-        this_session: [
+        done_this_session: [
           { task: 'Task 1', files: ['file1.ts'] },
           { task: 'Task 2', files: ['file2.ts', 'file3.ts'] },
         ],
@@ -324,15 +342,16 @@ describe('Artifact Validator', () => {
       expect(result.valid).toBe(true);
     });
 
-    it('should reject this_session with missing task', () => {
+    it('should reject done_this_session with missing task', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
-        this_session: [
+        done_this_session: [
           { files: ['file1.ts'] }, // Missing task
         ],
       };
@@ -342,15 +361,16 @@ describe('Artifact Validator', () => {
       expect(result.errors!.some(e => e.message.includes('task'))).toBe(true);
     });
 
-    it('should reject this_session with missing files', () => {
+    it('should reject done_this_session with missing files', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
-        this_session: [
+        done_this_session: [
           { task: 'Task 1' }, // Missing files
         ],
       };
@@ -363,8 +383,9 @@ describe('Artifact Validator', () => {
     it('should validate git metadata', () => {
       const artifact: CheckpointArtifact = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -383,8 +404,9 @@ describe('Artifact Validator', () => {
     it('should reject git metadata with missing required fields', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -402,8 +424,9 @@ describe('Artifact Validator', () => {
     it('should reject invalid pr_ready URL', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -422,7 +445,7 @@ describe('Artifact Validator', () => {
 
   describe('assertValidArtifact', () => {
     it('should not throw for valid artifact', () => {
-      const artifact = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED');
+      const artifact = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED', { session: 'test-session' });
 
       expect(() => {
         assertValidArtifact(artifact);
@@ -432,8 +455,9 @@ describe('Artifact Validator', () => {
     it('should throw for invalid artifact with error details', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'invalid',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'invalid',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -447,8 +471,9 @@ describe('Artifact Validator', () => {
     it('should include field paths in error message', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         // Missing outcome
@@ -465,15 +490,16 @@ describe('Artifact Validator', () => {
 
   describe('isValidArtifact', () => {
     it('should return true for valid artifact', () => {
-      const artifact = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED');
+      const artifact = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED', { session: 'test-session' });
       expect(isValidArtifact(artifact)).toBe(true);
     });
 
     it('should return false for invalid artifact', () => {
       const invalid = {
         schema_version: '1.0.0',
-        event_type: 'invalid',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'invalid',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -494,22 +520,20 @@ describe('Artifact Validator', () => {
     it('should validate artifact with all optional fields', () => {
       const artifact: CheckpointArtifact = {
         schema_version: '1.0.0',
-        event_type: 'checkpoint',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'checkpoint',
+        date: '2026-01-13T10:00:00Z',
         session_id: 'sess-123',
-        session_name: 'test-session',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
-        this_session: [{ task: 'Task', files: ['file.ts'] }],
+        done_this_session: [{ task: 'Task', files: ['file.ts'] }],
         next: ['Next 1', 'Next 2'],
         blockers: ['Blocker 1'],
         questions: ['Question 1'],
         decisions: { key: 'value' },
-        learnings: {
-          worked: ['Worked'],
-          failed: ['Failed'],
-        },
+        worked: ['Worked'],
+        failed: ['Failed'],
         findings: { finding: 'value' },
         git: {
           branch: 'feat/test',
@@ -533,8 +557,9 @@ describe('Artifact Validator', () => {
     it('should validate handoff with all mode-specific fields', () => {
       const artifact: HandoffArtifact = {
         schema_version: '1.0.0',
-        event_type: 'handoff',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'handoff',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -554,8 +579,9 @@ describe('Artifact Validator', () => {
     it('should validate finalize with all mode-specific fields', () => {
       const artifact: FinalizeArtifact = {
         schema_version: '1.0.0',
-        event_type: 'finalize',
-        timestamp: '2026-01-13T10:00:00Z',
+        mode: 'finalize',
+        date: '2026-01-13T10:00:00Z',
+        session: 'test-session',
         goal: 'Goal',
         now: 'Now',
         outcome: 'SUCCEEDED',
@@ -587,6 +613,7 @@ describe('Artifact Validator', () => {
 
     it('should accept metadata with any structure', () => {
       const artifact = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED', {
+        session: 'test-session',
         metadata: {
           custom_field: 'value',
           nested: { deep: { value: 123 } },

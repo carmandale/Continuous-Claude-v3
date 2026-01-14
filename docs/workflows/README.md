@@ -236,7 +236,7 @@ arbiter: ✅ 45/45 tests passing
          ✅ Type checks passing
 
 scribe: Updated docs/auth.md
-        Created handoff at thoughts/shared/handoffs/events/
+        Created handoff at thoughts/shared/handoffs/<session>/
 
 Build complete!
 ```
@@ -970,10 +970,10 @@ Workflows create handoffs for continuity:
 
 ```
 thoughts/shared/handoffs/
-└── events/
-    ├── 2026-01-14T00-54-26.972Z_77ef540c.md
-    ├── 2026-01-14T01-22-06.625Z_8c25a60a.md
-    └── 2026-01-14T02-39-48.315Z_5e975609.md
+└── Continuous-Claude-v3-123-auth-refactor/
+    ├── 2026-01-14_00-54_auth-refactor_checkpoint.yaml
+    ├── 2026-01-14_01-22_auth-refactor_handoff.yaml
+    └── 2026-01-14_02-39_auth-refactor_finalize.yaml
 ```
 
 Use handoffs to:

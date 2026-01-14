@@ -3,7 +3,7 @@
  *
  * Verifies that:
  * - writeArtifact() writes to correct location
- * - Filename format matches spec (YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md)
+ * - Filename format matches spec (YYYY-MM-DD_HH-MM_<title>_<mode>.yaml)
  * - YAML frontmatter is correctly formatted
  * - All three event types (checkpoint, handoff, finalize) work
  * - Validation is enforced before writing
@@ -34,28 +34,28 @@ import YAML from 'yaml';
 // Test Fixtures
 // =============================================================================
 
-const TEST_TIMESTAMP = '2026-01-14T00:54:26.972Z';
-const TEST_SESSION_ID = '77ef540c';
+const TEST_DATE = '2026-01-14T00:54:26.972Z';
+const TEST_SESSION = 'test-session';
 
 function createTestCheckpoint(): CheckpointArtifact {
   return createArtifact('checkpoint', 'Test goal', 'Test now', 'SUCCEEDED', {
-    timestamp: TEST_TIMESTAMP,
-    session_id: TEST_SESSION_ID,
+    date: TEST_DATE,
+    session: TEST_SESSION,
   }) as CheckpointArtifact;
 }
 
 function createTestHandoff(): HandoffArtifact {
   return createArtifact('handoff', 'Test goal', 'Test now', 'PARTIAL_PLUS', {
-    timestamp: TEST_TIMESTAMP,
-    session_id: TEST_SESSION_ID,
+    date: TEST_DATE,
+    session: TEST_SESSION,
     primary_bead: 'test-bead-123',
   }) as HandoffArtifact;
 }
 
 function createTestFinalize(): FinalizeArtifact {
   return createArtifact('finalize', 'Test goal', 'Test now', 'SUCCEEDED', {
-    timestamp: TEST_TIMESTAMP,
-    session_id: TEST_SESSION_ID,
+    date: TEST_DATE,
+    session: TEST_SESSION,
     primary_bead: 'test-bead-456',
   }) as FinalizeArtifact;
 }
@@ -87,23 +87,36 @@ describe('artifact-writer', () => {
 
   describe('generateFilename', () => {
     it('should generate correct filename format', () => {
-      const filename = generateFilename(TEST_TIMESTAMP, TEST_SESSION_ID);
-      expect(filename).toBe('2026-01-14T00-54-26.972Z_77ef540c.md');
+      const filename = generateFilename(createTestCheckpoint());
+      expect(filename).toBe('2026-01-14_00-54_test-session_checkpoint.yaml');
     });
 
-    it('should replace colons with hyphens in timestamp', () => {
-      const filename = generateFilename('2026-01-14T12:34:56.789Z', 'abc12345');
-      expect(filename).toBe('2026-01-14T12-34-56.789Z_abc12345.md');
+    it('should normalize time separator in date', () => {
+      const artifact = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED', {
+        date: '2026-01-14T12:34:56.789Z',
+        session: 'test-session',
+      });
+      const filename = generateFilename(artifact);
+      expect(filename).toBe('2026-01-14_12-34_test-session_checkpoint.yaml');
     });
 
-    it('should generate session ID if not provided', () => {
-      const filename = generateFilename(TEST_TIMESTAMP);
-      expect(filename).toMatch(/^2026-01-14T00-54-26\.972Z_[0-9a-f]{8}\.md$/);
+    it('should default to midnight when time is omitted', () => {
+      const artifact = createArtifact('checkpoint', 'Goal', 'Now', 'SUCCEEDED', {
+        date: '2026-01-14',
+        session: 'test-session',
+      });
+      const filename = generateFilename(artifact);
+      expect(filename).toBe('2026-01-14_00-00_test-session_checkpoint.yaml');
     });
 
-    it('should preserve milliseconds in timestamp', () => {
-      const filename = generateFilename('2026-01-14T00:00:00.123Z', 'test1234');
-      expect(filename).toContain('.123Z');
+    it('should use title slug when session includes bead prefix', () => {
+      const artifact = createArtifact('handoff', 'Goal', 'Now', 'SUCCEEDED', {
+        date: '2026-01-14T00:00:00Z',
+        session: 'bead-123-auth-refactor',
+        primary_bead: 'bead-123',
+      });
+      const filename = generateFilename(artifact);
+      expect(filename).toBe('2026-01-14_00-00_auth-refactor_handoff.yaml');
     });
   });
 
@@ -118,7 +131,7 @@ describe('artifact-writer', () => {
 
       expect(yaml).toContain('---\n');
       expect(yaml).toContain('schema_version: 1.0.0');
-      expect(yaml).toContain('event_type: checkpoint');
+      expect(yaml).toContain('mode: checkpoint');
       expect(yaml).toContain('goal: Test goal');
       expect(yaml).toContain('now: Test now');
       expect(yaml).toContain('outcome: SUCCEEDED');
@@ -128,7 +141,7 @@ describe('artifact-writer', () => {
       const artifact = createTestHandoff();
       const yaml = formatArtifactYaml(artifact);
 
-      expect(yaml).toContain('event_type: handoff');
+      expect(yaml).toContain('mode: handoff');
       expect(yaml).toContain('primary_bead: test-bead-123');
     });
 
@@ -136,7 +149,7 @@ describe('artifact-writer', () => {
       const artifact = createTestFinalize();
       const yaml = formatArtifactYaml(artifact);
 
-      expect(yaml).toContain('event_type: finalize');
+      expect(yaml).toContain('mode: finalize');
       expect(yaml).toContain('primary_bead: test-bead-456');
     });
 
@@ -157,13 +170,14 @@ describe('artifact-writer', () => {
       const artifact = createTestCheckpoint();
       const yaml = formatArtifactYaml(artifact);
 
-      // Remove frontmatter delimiters
-      const yamlContent = yaml.replace(/^---\n/, '').replace(/\n---\n$/, '');
-      const parsed = YAML.parse(yamlContent);
+      const match = yaml.match(/^---\n([\s\S]*?)\n---\n\n([\s\S]*)$/);
+      expect(match).not.toBeNull();
+      const frontmatter = YAML.parse(match![1]);
+      const body = YAML.parse(match![2]);
 
-      expect(parsed.schema_version).toBe(artifact.schema_version);
-      expect(parsed.event_type).toBe(artifact.event_type);
-      expect(parsed.goal).toBe(artifact.goal);
+      expect(frontmatter.schema_version).toBe(artifact.schema_version);
+      expect(frontmatter.mode).toBe(artifact.mode);
+      expect(body.goal).toBe(artifact.goal);
     });
   });
 
@@ -173,33 +187,39 @@ describe('artifact-writer', () => {
 
   describe('resolveArtifactPath', () => {
     it('should resolve path relative to base directory', () => {
-      const path = resolveArtifactPath('test.md', tempDir);
-      expect(path).toBe(join(tempDir, ARTIFACT_DIR, 'test.md'));
+      const artifact = createTestCheckpoint();
+      const expected = join(tempDir, ARTIFACT_DIR, artifact.session, generateFilename(artifact));
+      const resolved = resolveArtifactPath(artifact, tempDir);
+      expect(resolved).toBe(expected);
     });
 
     it('should use process.cwd() by default', () => {
-      const path = resolveArtifactPath('test.md');
-      expect(path).toBe(join(process.cwd(), ARTIFACT_DIR, 'test.md'));
+      const artifact = createTestCheckpoint();
+      const expected = join(process.cwd(), ARTIFACT_DIR, artifact.session, generateFilename(artifact));
+      const resolved = resolveArtifactPath(artifact);
+      expect(resolved).toBe(expected);
     });
   });
 
   describe('ensureArtifactDir', () => {
     it('should create directory if it does not exist', async () => {
-      const dirPath = join(tempDir, ARTIFACT_DIR);
+      const artifact = createTestCheckpoint();
+      const dirPath = join(tempDir, ARTIFACT_DIR, artifact.session);
 
       // Verify directory doesn't exist yet
       await expect(access(dirPath)).rejects.toThrow();
 
       // Create directory
-      await ensureArtifactDir(tempDir);
+      await ensureArtifactDir(artifact, tempDir);
 
       // Verify directory now exists
       await expect(access(dirPath)).resolves.toBeUndefined();
     });
 
     it('should not error if directory already exists', async () => {
-      await ensureArtifactDir(tempDir);
-      await expect(ensureArtifactDir(tempDir)).resolves.toBeUndefined();
+      const artifact = createTestCheckpoint();
+      await ensureArtifactDir(artifact, tempDir);
+      await expect(ensureArtifactDir(artifact, tempDir)).resolves.toBeUndefined();
     });
   });
 
@@ -212,13 +232,13 @@ describe('artifact-writer', () => {
       const artifact = createTestCheckpoint();
       const path = await writeArtifact(artifact, { baseDir: tempDir });
 
-      const expectedPath = join(tempDir, ARTIFACT_DIR, '2026-01-14T00-54-26.972Z_77ef540c.md');
+      const expectedPath = resolveArtifactPath(artifact, tempDir);
       expect(path).toBe(expectedPath);
 
       // Verify file exists
       const content = await readFile(path, 'utf-8');
       expect(content).toContain('---\n');
-      expect(content).toContain('event_type: checkpoint');
+      expect(content).toContain('mode: checkpoint');
     });
 
     it('should write handoff artifact with primary_bead', async () => {
@@ -226,7 +246,7 @@ describe('artifact-writer', () => {
       const path = await writeArtifact(artifact, { baseDir: tempDir });
 
       const content = await readFile(path, 'utf-8');
-      expect(content).toContain('event_type: handoff');
+      expect(content).toContain('mode: handoff');
       expect(content).toContain('primary_bead: test-bead-123');
     });
 
@@ -235,7 +255,7 @@ describe('artifact-writer', () => {
       const path = await writeArtifact(artifact, { baseDir: tempDir });
 
       const content = await readFile(path, 'utf-8');
-      expect(content).toContain('event_type: finalize');
+      expect(content).toContain('mode: finalize');
       expect(content).toContain('primary_bead: test-bead-456');
     });
 
@@ -260,7 +280,7 @@ describe('artifact-writer', () => {
       const artifact = createTestCheckpoint();
       const path = await writeArtifact(artifact, { baseDir: tempDir, dryRun: true });
 
-      const expectedPath = join(tempDir, ARTIFACT_DIR, '2026-01-14T00-54-26.972Z_77ef540c.md');
+      const expectedPath = resolveArtifactPath(artifact, tempDir);
       expect(path).toBe(expectedPath);
 
       // Verify file was NOT written
@@ -285,7 +305,7 @@ describe('artifact-writer', () => {
       expect(result.path).toBeTruthy();
       expect(result.content).toBeTruthy();
       expect(result.content).toContain('---\n');
-      expect(result.content).toContain('event_type: checkpoint');
+      expect(result.content).toContain('mode: checkpoint');
 
       // Verify file was written with same content
       const fileContent = await readFile(result.path, 'utf-8');
@@ -327,7 +347,7 @@ describe('artifact-writer', () => {
       const artifact = createTestCheckpoint();
       const path = getArtifactPath(artifact, tempDir);
 
-      const expectedPath = join(tempDir, ARTIFACT_DIR, '2026-01-14T00-54-26.972Z_77ef540c.md');
+      const expectedPath = resolveArtifactPath(artifact, tempDir);
       expect(path).toBe(expectedPath);
 
       // Verify file does NOT exist
@@ -343,22 +363,21 @@ describe('artifact-writer', () => {
     it('should write and read back checkpoint artifact', async () => {
       const artifact = createTestCheckpoint();
       artifact.next = ['Task 1', 'Task 2'];
-      artifact.learnings = {
-        worked: ['Pattern 1'],
-        failed: ['Pattern 2'],
-      };
+      artifact.worked = ['Pattern 1'];
+      artifact.failed = ['Pattern 2'];
 
       const path = await writeArtifact(artifact, { baseDir: tempDir });
       const content = await readFile(path, 'utf-8');
 
-      // Parse YAML
-      const yamlContent = content.replace(/^---\n/, '').replace(/\n---\n$/, '');
-      const parsed = YAML.parse(yamlContent);
+      const match = content.match(/^---\n([\s\S]*?)\n---\n\n([\s\S]*)$/);
+      expect(match).not.toBeNull();
+      const frontmatter = YAML.parse(match![1]);
+      const body = YAML.parse(match![2]);
 
-      expect(parsed.event_type).toBe('checkpoint');
-      expect(parsed.goal).toBe('Test goal');
-      expect(parsed.next).toEqual(['Task 1', 'Task 2']);
-      expect(parsed.learnings.worked).toEqual(['Pattern 1']);
+      expect(frontmatter.mode).toBe('checkpoint');
+      expect(body.goal).toBe('Test goal');
+      expect(body.next).toEqual(['Task 1', 'Task 2']);
+      expect(body.worked).toEqual(['Pattern 1']);
     });
 
     it('should write handoff with all fields', async () => {

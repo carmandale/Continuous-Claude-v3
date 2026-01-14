@@ -37,7 +37,9 @@ Searchable via: `cass search "unified artifact checkpoint handoff finalize" --ro
 /finalize ────┘
 ```
 
-All write to: `thoughts/shared/handoffs/{session-name}/YYYY-MM-DD_HH-MM_{description}.yaml`
+All write to: `thoughts/shared/handoffs/{session}/YYYY-MM-DD_HH-MM_{short-title}_{mode}.yaml`
+
+**Format:** YAML frontmatter + YAML body (no Markdown body).
 
 ### Mode Comparison
 
@@ -51,18 +53,17 @@ All write to: `thoughts/shared/handoffs/{session-name}/YYYY-MM-DD_HH-MM_{descrip
 
 ```yaml
 ---
-date: 2026-01-13T10:00:00Z
 mode: checkpoint | handoff | finalize
-session_name: auth-refactor
-branch: feature/session-auth
-git_commit: abc1234
+date: 2026-01-13T10:00:00Z
+session: Continuous-Claude-v3-123-auth-refactor
+primary_bead: Continuous-Claude-v3-123
 outcome: SUCCEEDED | PARTIAL_PLUS | PARTIAL_MINUS | FAILED
 ---
 
 goal: One-liner success criteria
 now: Current focus (one thing)
 
-this_session:
+done_this_session:
   - Completed item 1
   - Completed item 2
 
@@ -73,11 +74,10 @@ next:
 decisions:
   - key: rationale
 
-learnings:
-  worked:
-    - What worked well
-  failed:
-    - What didn't work and why
+worked:
+  - What worked well
+failed:
+  - What didn't work and why
 ```
 
 ### Mode-Specific Fields
@@ -89,7 +89,6 @@ learnings:
 
 **Handoff (additional):**
 ```yaml
-primary_bead: p33
 related_beads: [cd5, c2f]
 
 files_to_review:
@@ -105,7 +104,6 @@ continuation_prompt: |
 
 **Finalize (additional):**
 ```yaml
-primary_bead: p33
 related_beads: [cd5, c2f]
 
 final_solutions:
@@ -120,39 +118,37 @@ final_decisions:
 
 artifacts_produced:
   - path: src/auth/session.py
-    description: Session model and Redis integration
+    note: Session model and Redis integration
   - path: docs/auth-migration.md
-    description: Migration guide from JWT
+    note: Migration guide from JWT
 ```
 
 ## Implementation Phases
 
 ### Phase 1: Create Core Generator
 
-**File:** `~/.claude/scripts/cc-artifact` (bash wrapper)
+**File:** (internal generator script)
 
 ```bash
-cc-artifact --mode checkpoint
-cc-artifact --mode handoff --bead p33
-cc-artifact --mode finalize --bead p33
+# internal generator invoked by /checkpoint, /handoff, /finalize
 ```
 
 The script:
 1. Validates bead requirement (handoff/finalize)
 2. Gathers git metadata
-3. Generates YAML template
+3. Generates YAML template (frontmatter + YAML body)
 4. Opens for editing or outputs directly
 
 ### Phase 2: Update Slash Commands
 
 **Files:**
-- `~/.claude/commands/checkpoint.md` → calls `cc-artifact --mode checkpoint`
-- `~/.claude/commands/handoff.md` → calls `cc-artifact --mode handoff`
-- `~/.claude/commands/finalize.md` → NEW, calls `cc-artifact --mode finalize`
+- `~/.claude/commands/checkpoint.md` → calls internal generator
+- `~/.claude/commands/handoff.md` → calls internal generator
+- `~/.claude/commands/finalize.md` → NEW, calls internal generator
 
 Each command:
 1. Invokes the core generator
-2. Captures assistant reasoning for learnings/decisions
+2. Captures decisions plus worked/failed notes
 3. Asks for outcome
 4. Commits and optionally pushes
 
@@ -196,19 +192,19 @@ Historical files remain for reference but no new files written.
 
 ## Acceptance Criteria
 
-- [ ] `/checkpoint` creates YAML artifact in `thoughts/shared/handoffs/`, bead optional
+- [ ] `/checkpoint` creates YAML artifact in `thoughts/shared/handoffs/{bead}-{short-title}/`, bead optional
 - [ ] `/handoff` creates YAML artifact, bead required (hard stop if none)
 - [ ] `/finalize` creates YAML artifact with final_solutions/final_decisions, bead required
-- [ ] All three capture outcome and learnings
+- [ ] All three capture outcome and worked/failed notes
 - [ ] No new files written to `.handoff/` or `.checkpoint/`
-- [ ] SessionStart hook continues to work (extracts goal/now)
+- [ ] SessionStart hook continues to work (extracts goal/now from YAML body)
 
 ## Open Questions
 
 | Question | Proposed Answer |
 |----------|-----------------|
-| Session name with bead? | `{session-name}` folder, bead in YAML frontmatter |
-| Auto-commit behavior? | checkpoint: commit only; handoff/finalize: commit + push |
+| Session name with bead? | `primary_bead` + short slug (prompt for session if missing) |
+| Auto-commit behavior? | Legacy behavior (minimize change) |
 | Outcome marking? | All modes support outcomes |
 
 ## Related Beads

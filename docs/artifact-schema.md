@@ -27,25 +27,23 @@ All artifacts share these base fields:
 ```typescript
 {
   schema_version: string;     // e.g., "1.0.0"
-  event_type: "checkpoint" | "handoff" | "finalize";
-  timestamp: string;          // ISO 8601
+  mode: "checkpoint" | "handoff" | "finalize";
+  date: string;          // ISO 8601 date or date-time
+  session: string;       // Session folder name (bead + slug)
   session_id?: string;
-  session_name?: string;
 
   goal: string;               // One-liner success criteria
   now: string;                // Current focus (one thing)
   outcome: "SUCCEEDED" | "PARTIAL_PLUS" | "PARTIAL_MINUS" | "FAILED";
 
-  this_session?: CompletedTask[];
+  done_this_session?: CompletedTask[];
   next?: string[];
   blockers?: string[];
   questions?: string[];
 
   decisions?: Record<string, string> | Decision[];
-  learnings?: {
-    worked?: string[];
-    failed?: string[];
-  };
+  worked?: string[];
+  failed?: string[];
   findings?: Record<string, string>;
 
   git?: {
@@ -107,10 +105,10 @@ Checkpoint is the lightest-weight mode, using only common fields.
 
 ## Type Definitions
 
-### ArtifactEventType
+### ArtifactMode
 
 ```typescript
-type ArtifactEventType = 'checkpoint' | 'handoff' | 'finalize';
+type ArtifactMode = 'checkpoint' | 'handoff' | 'finalize';
 ```
 
 ### SessionOutcome
@@ -165,8 +163,8 @@ const checkpoint = createArtifact(
   'Writing JWT validation middleware',
   'PARTIAL_PLUS',
   {
-    timestamp: '2026-01-13T10:00:00Z',
-    session_name: 'auth-refactor',
+    date: '2026-01-13T10:00:00Z',
+    session: 'auth-refactor',
   }
 );
 ```
@@ -180,8 +178,8 @@ const handoff = createArtifact(
   'Complete logout endpoint',
   'PARTIAL_PLUS',
   {
-    timestamp: '2026-01-13T15:00:00Z',
-    session_name: 'auth-refactor',
+    date: '2026-01-13T15:00:00Z',
+    session: 'auth-refactor',
     primary_bead: 'beads-123',
   }
 );
@@ -203,8 +201,8 @@ const finalize = createArtifact(
   'Session complete - all endpoints tested',
   'SUCCEEDED',
   {
-    timestamp: '2026-01-13T18:00:00Z',
-    session_name: 'auth-refactor',
+    date: '2026-01-13T18:00:00Z',
+    session: 'auth-refactor',
     primary_bead: 'beads-123',
   }
 );
@@ -285,7 +283,7 @@ if (isFinalize(artifact)) {
 }
 
 // Check if event type requires a bead
-if (requiresBead(artifact.event_type)) {
+if (requiresBead(artifact.mode)) {
   // Must have primary_bead field
 }
 ```
@@ -296,6 +294,7 @@ The schema supports extensibility through the `metadata` field:
 
 ```typescript
 const artifact = createArtifact('checkpoint', goal, now, outcome, {
+  session: 'auth-refactor',
   metadata: {
     custom_field: 'value',
     integration_data: { foo: 'bar' },
@@ -317,9 +316,9 @@ Artifacts are typically stored as YAML files with frontmatter:
 ```yaml
 ---
 schema_version: 1.0.0
-event_type: handoff
-timestamp: 2026-01-13T15:00:00Z
-session_name: auth-refactor
+mode: handoff
+date: 2026-01-13T15:00:00Z
+session: auth-refactor
 outcome: PARTIAL_PLUS
 primary_bead: beads-123
 ---
@@ -327,7 +326,7 @@ primary_bead: beads-123
 goal: Implement user authentication
 now: Complete logout endpoint
 
-this_session:
+done_this_session:
   - task: Implemented JWT middleware
     files: [src/auth/jwt.ts]
   - task: Added 15 unit tests
@@ -341,12 +340,11 @@ decisions:
   jwt_library: Chose jsonwebtoken over jose for better docs
   token_storage: Redis with 24h TTL
 
-learnings:
-  worked:
-    - Pre-planning auth flow saved time
-    - TDD approach caught edge cases early
-  failed:
-    - Initial token refresh was too complex
+worked:
+  - Pre-planning auth flow saved time
+  - TDD approach caught edge cases early
+failed:
+  - Initial token refresh was too complex
 
 files_to_review:
   - path: src/auth/jwt.ts
@@ -361,12 +359,12 @@ continuation_prompt: |
 
 ## Storage Convention
 
-Artifacts are stored in: `thoughts/shared/handoffs/events/YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md`
+Artifacts are stored in: `thoughts/shared/handoffs/<session>/YYYY-MM-DD_HH-MM_<title>_<mode>.yaml`
 
 Examples:
-- `thoughts/shared/handoffs/events/2026-01-14T00-54-26.972Z_77ef540c.md`
-- `thoughts/shared/handoffs/events/2026-01-14T01-22-06.625Z_8c25a60a.md`
-- `thoughts/shared/handoffs/events/2026-01-14T02-39-48.315Z_5e975609.md`
+- `thoughts/shared/handoffs/auth-refactor/2026-01-14_00-54_auth-refactor_handoff.yaml`
+- `thoughts/shared/handoffs/auth-refactor/2026-01-14_01-22_auth-refactor_checkpoint.yaml`
+- `thoughts/shared/handoffs/auth-refactor/2026-01-14_02-39_auth-refactor_finalize.yaml`
 
 ## Migration from Legacy Formats
 
@@ -387,8 +385,9 @@ New format:
 ```yaml
 ---
 schema_version: 1.0.0
-event_type: handoff
-timestamp: 2026-01-13T15:00:00Z
+mode: handoff
+date: 2026-01-13T15:00:00Z
+session: auth-refactor
 primary_bead: beads-123
 ---
 
@@ -398,13 +397,13 @@ goal: Implement user authentication
 
 ### From `.checkpoint/` (Legacy)
 
-Checkpoint artifacts now use the same unified schema with `event_type: checkpoint`.
+Checkpoint artifacts now use the same unified schema with `mode: checkpoint`.
 
 ## Related Documentation
 
 - **Plan**: `thoughts/shared/plans/2026-01-13-unified-artifact-system.md`
 - **Implementation**: `.claude/hooks/src/shared/artifact-schema.ts`
-- **Examples**: `thoughts/shared/handoffs/events/`
+- **Examples**: `thoughts/shared/handoffs/<session>/`
 - **Slash Commands**: `~/.claude/commands/{checkpoint,handoff,finalize}.md`
 
 ## Version History

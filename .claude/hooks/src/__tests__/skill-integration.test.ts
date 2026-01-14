@@ -6,7 +6,7 @@
  * 2. Artifacts are created in the correct location
  * 3. Artifacts validate against the unified schema
  * 4. Content includes all expected fields
- * 5. Filenames follow the spec (YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md)
+ * 5. Filenames follow the spec (YYYY-MM-DD_HH-MM_<title>_<mode>.yaml)
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -56,10 +56,15 @@ async function runCLI(scriptPath: string, args: string[]): Promise<SpawnResult> 
   });
 }
 
-function parseArtifactYAML(content: string): any {
-  // Remove frontmatter delimiters
-  const yamlContent = content.replace(/^---\n/, '').split('\n---\n')[0];
-  return YAML.parse(yamlContent);
+function parseArtifactYAML(content: string): { frontmatter: any; body: any } {
+  const match = content.match(/^---\n([\s\S]*?)\n---\n\n([\s\S]*)$/);
+  if (!match) {
+    return { frontmatter: {}, body: {} };
+  }
+  return {
+    frontmatter: YAML.parse(match[1]),
+    body: YAML.parse(match[2]),
+  };
 }
 
 // =============================================================================
@@ -104,6 +109,7 @@ describe('Skill Integration Tests', () => {
         '--goal', 'Test checkpoint goal',
         '--now', 'Test checkpoint now',
         '--outcome', 'PARTIAL_PLUS',
+        '--session-title', 'checkpoint-test',
       ]);
 
       expect(result.exitCode).toBe(0);
@@ -118,12 +124,12 @@ describe('Skill Integration Tests', () => {
       const content = await readFile(output.path, 'utf-8');
       const parsed = parseArtifactYAML(content);
 
-      expect(parsed.schema_version).toBe('1.0.0');
-      expect(parsed.event_type).toBe('checkpoint');
-      expect(parsed.goal).toBe('Test checkpoint goal');
-      expect(parsed.now).toBe('Test checkpoint now');
-      expect(parsed.outcome).toBe('PARTIAL_PLUS');
-      expect(parsed.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect(parsed.frontmatter.schema_version).toBe('1.0.0');
+      expect(parsed.frontmatter.mode).toBe('checkpoint');
+      expect(parsed.body.goal).toBe('Test checkpoint goal');
+      expect(parsed.body.now).toBe('Test checkpoint now');
+      expect(parsed.frontmatter.outcome).toBe('PARTIAL_PLUS');
+      expect(parsed.frontmatter.date).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
 
     it('should create checkpoint artifact with bead ID', async () => {
@@ -140,7 +146,7 @@ describe('Skill Integration Tests', () => {
       const content = await readFile(output.path, 'utf-8');
       const parsed = parseArtifactYAML(content);
 
-      expect(parsed.primary_bead).toBe('test-bead-123');
+      expect(parsed.frontmatter.primary_bead).toBe('test-bead-123');
     });
 
     it('should create checkpoint with next steps and blockers', async () => {
@@ -148,6 +154,7 @@ describe('Skill Integration Tests', () => {
         '--goal', 'Progress checkpoint',
         '--now', 'Mid-task',
         '--outcome', 'PARTIAL_PLUS',
+        '--session-title', 'checkpoint-test',
         '--next', 'Step 1',
         '--next', 'Step 2',
         '--blockers', 'Blocker 1',
@@ -159,8 +166,8 @@ describe('Skill Integration Tests', () => {
       const content = await readFile(output.path, 'utf-8');
       const parsed = parseArtifactYAML(content);
 
-      expect(parsed.next).toEqual(['Step 1', 'Step 2']);
-      expect(parsed.blockers).toEqual(['Blocker 1']);
+      expect(parsed.body.next).toEqual(['Step 1', 'Step 2']);
+      expect(parsed.body.blockers).toEqual(['Blocker 1']);
     });
 
     it('should write checkpoint to correct directory', async () => {
@@ -168,6 +175,7 @@ describe('Skill Integration Tests', () => {
         '--goal', 'Location test',
         '--now', 'Testing location',
         '--outcome', 'SUCCEEDED',
+        '--session-title', 'checkpoint-test',
       ]);
 
       expect(result.exitCode).toBe(0);
@@ -175,7 +183,7 @@ describe('Skill Integration Tests', () => {
 
       // Verify path contains the artifact directory
       expect(output.path).toContain(ARTIFACT_DIR);
-      expect(output.path).toMatch(/\/thoughts\/shared\/handoffs\/events\//);
+      expect(output.path).toMatch(/\/thoughts\/shared\/handoffs\/[^/]+\//);
     });
 
     it('should generate filename in correct format', async () => {
@@ -183,6 +191,7 @@ describe('Skill Integration Tests', () => {
         '--goal', 'Filename test',
         '--now', 'Testing filename',
         '--outcome', 'SUCCEEDED',
+        '--session-title', 'checkpoint-test',
       ]);
 
       expect(result.exitCode).toBe(0);
@@ -191,8 +200,8 @@ describe('Skill Integration Tests', () => {
       // Extract filename from path
       const filename = output.path.split('/').pop();
 
-      // Verify format: YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
-      expect(filename).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z_[0-9a-f]{8}\.md$/);
+      // Verify format: YYYY-MM-DD_HH-MM_<title>_checkpoint.yaml
+      expect(filename).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}_.+_checkpoint\.yaml$/);
     });
   });
 
@@ -223,12 +232,12 @@ describe('Skill Integration Tests', () => {
       const content = await readFile(output.path, 'utf-8');
       const parsed = parseArtifactYAML(content);
 
-      expect(parsed.schema_version).toBe('1.0.0');
-      expect(parsed.event_type).toBe('handoff');
-      expect(parsed.goal).toBe('Test handoff goal');
-      expect(parsed.now).toBe('Next session should continue');
-      expect(parsed.outcome).toBe('PARTIAL_PLUS');
-      expect(parsed.primary_bead).toBe('beads-handoff-123');
+      expect(parsed.frontmatter.schema_version).toBe('1.0.0');
+      expect(parsed.frontmatter.mode).toBe('handoff');
+      expect(parsed.body.goal).toBe('Test handoff goal');
+      expect(parsed.body.now).toBe('Next session should continue');
+      expect(parsed.frontmatter.outcome).toBe('PARTIAL_PLUS');
+      expect(parsed.frontmatter.primary_bead).toBe('beads-handoff-123');
     });
 
     it('should fail without primary_bead', async () => {
@@ -264,9 +273,9 @@ describe('Skill Integration Tests', () => {
       const content = await readFile(output.path, 'utf-8');
       const parsed = parseArtifactYAML(content);
 
-      expect(parsed.files_to_review).toHaveLength(2);
-      expect(parsed.files_to_review[0].path).toBe('src/test.ts');
-      expect(parsed.files_to_review[0].note).toBe('Main implementation');
+      expect(parsed.body.files_to_review).toHaveLength(2);
+      expect(parsed.body.files_to_review[0].path).toBe('src/test.ts');
+      expect(parsed.body.files_to_review[0].note).toBe('Main implementation');
     });
 
     it('should create handoff with continuation_prompt', async () => {
@@ -284,7 +293,7 @@ describe('Skill Integration Tests', () => {
       const content = await readFile(output.path, 'utf-8');
       const parsed = parseArtifactYAML(content);
 
-      expect(parsed.continuation_prompt).toBe('Start by running tests');
+      expect(parsed.body.continuation_prompt).toBe('Start by running tests');
     });
 
     it('should write handoff to correct directory', async () => {
@@ -300,7 +309,7 @@ describe('Skill Integration Tests', () => {
 
       // Verify path contains the artifact directory
       expect(output.path).toContain(ARTIFACT_DIR);
-      expect(output.path).toMatch(/\/thoughts\/shared\/handoffs\/events\//);
+      expect(output.path).toMatch(/\/thoughts\/shared\/handoffs\/[^/]+\//);
     });
   });
 
@@ -331,12 +340,12 @@ describe('Skill Integration Tests', () => {
       const content = await readFile(output.path, 'utf-8');
       const parsed = parseArtifactYAML(content);
 
-      expect(parsed.schema_version).toBe('1.0.0');
-      expect(parsed.event_type).toBe('finalize');
-      expect(parsed.goal).toBe('Test finalize goal');
-      expect(parsed.now).toBe('Work is complete');
-      expect(parsed.outcome).toBe('SUCCEEDED');
-      expect(parsed.primary_bead).toBe('beads-finalize-123');
+      expect(parsed.frontmatter.schema_version).toBe('1.0.0');
+      expect(parsed.frontmatter.mode).toBe('finalize');
+      expect(parsed.body.goal).toBe('Test finalize goal');
+      expect(parsed.body.now).toBe('Work is complete');
+      expect(parsed.frontmatter.outcome).toBe('SUCCEEDED');
+      expect(parsed.frontmatter.primary_bead).toBe('beads-finalize-123');
     });
 
     it('should fail without primary_bead', async () => {
@@ -375,9 +384,9 @@ describe('Skill Integration Tests', () => {
       const content = await readFile(output.path, 'utf-8');
       const parsed = parseArtifactYAML(content);
 
-      expect(parsed.final_solutions).toHaveLength(1);
-      expect(parsed.final_solutions[0].problem).toBe('Auth complexity');
-      expect(parsed.final_solutions[0].solution).toBe('Simplified with sessions');
+      expect(parsed.body.final_solutions).toHaveLength(1);
+      expect(parsed.body.final_solutions[0].problem).toBe('Auth complexity');
+      expect(parsed.body.final_solutions[0].solution).toBe('Simplified with sessions');
     });
 
     it('should create finalize with final_decisions', async () => {
@@ -404,9 +413,9 @@ describe('Skill Integration Tests', () => {
       const content = await readFile(output.path, 'utf-8');
       const parsed = parseArtifactYAML(content);
 
-      expect(parsed.final_decisions).toHaveLength(1);
-      expect(parsed.final_decisions[0].decision).toBe('Use Redis for caching');
-      expect(parsed.final_decisions[0].alternatives_considered).toEqual(['In-memory', 'PostgreSQL']);
+      expect(parsed.body.final_decisions).toHaveLength(1);
+      expect(parsed.body.final_decisions[0].decision).toBe('Use Redis for caching');
+      expect(parsed.body.final_decisions[0].alternatives_considered).toEqual(['In-memory', 'PostgreSQL']);
     });
 
     it('should create finalize with artifacts_produced', async () => {
@@ -429,8 +438,8 @@ describe('Skill Integration Tests', () => {
       const content = await readFile(output.path, 'utf-8');
       const parsed = parseArtifactYAML(content);
 
-      expect(parsed.artifacts_produced).toHaveLength(2);
-      expect(parsed.artifacts_produced[0].path).toBe('src/new-feature.ts');
+      expect(parsed.body.artifacts_produced).toHaveLength(2);
+      expect(parsed.body.artifacts_produced[0].path).toBe('src/new-feature.ts');
     });
 
     it('should write finalize to correct directory', async () => {
@@ -446,7 +455,7 @@ describe('Skill Integration Tests', () => {
 
       // Verify path contains the artifact directory
       expect(output.path).toContain(ARTIFACT_DIR);
-      expect(output.path).toMatch(/\/thoughts\/shared\/handoffs\/events\//);
+      expect(output.path).toMatch(/\/thoughts\/shared\/handoffs\/[^/]+\//);
     });
   });
 
@@ -464,6 +473,7 @@ describe('Skill Integration Tests', () => {
           '--goal', 'Checkpoint',
           '--now', 'Working',
           '--outcome', 'PARTIAL_PLUS',
+          '--session-title', 'cross-skill-session',
           '--session_id', sessionId,
         ]
       );
@@ -495,19 +505,23 @@ describe('Skill Integration Tests', () => {
       expect(finalizeResult.exitCode).toBe(0);
 
       // Verify all have same session ID
-      const checkpointOutput = JSON.parse(checkpointResult.stdout);
-      const handoffOutput = JSON.parse(handoffResult.stdout);
-      const finalizeOutput = JSON.parse(finalizeResult.stdout);
+      const checkpointContent = await readFile(JSON.parse(checkpointResult.stdout).path, 'utf-8');
+      const handoffContent = await readFile(JSON.parse(handoffResult.stdout).path, 'utf-8');
+      const finalizeContent = await readFile(JSON.parse(finalizeResult.stdout).path, 'utf-8');
 
-      expect(checkpointOutput.artifact.session_id).toBe(sessionId);
-      expect(handoffOutput.artifact.session_id).toBe(sessionId);
-      expect(finalizeOutput.artifact.session_id).toBe(sessionId);
+      const checkpointParsed = parseArtifactYAML(checkpointContent);
+      const handoffParsed = parseArtifactYAML(handoffContent);
+      const finalizeParsed = parseArtifactYAML(finalizeContent);
+
+      expect(checkpointParsed.frontmatter.session_id).toBe(sessionId);
+      expect(handoffParsed.frontmatter.session_id).toBe(sessionId);
+      expect(finalizeParsed.frontmatter.session_id).toBe(sessionId);
     });
 
     it('should validate that all artifacts use same schema version', async () => {
       const checkpointResult = await runCLI(
         join(MODULE_CWD, 'dist/write-checkpoint-cli.mjs'),
-        ['--goal', 'Test', '--now', 'Test', '--outcome', 'SUCCEEDED']
+        ['--goal', 'Test', '--now', 'Test', '--outcome', 'SUCCEEDED', '--session-title', 'schema-test']
       );
 
       const handoffResult = await runCLI(
@@ -528,9 +542,9 @@ describe('Skill Integration Tests', () => {
       const handoffParsed = parseArtifactYAML(handoffContent);
       const finalizeParsed = parseArtifactYAML(finalizeContent);
 
-      expect(checkpointParsed.schema_version).toBe('1.0.0');
-      expect(handoffParsed.schema_version).toBe('1.0.0');
-      expect(finalizeParsed.schema_version).toBe('1.0.0');
+      expect(checkpointParsed.frontmatter.schema_version).toBe('1.0.0');
+      expect(handoffParsed.frontmatter.schema_version).toBe('1.0.0');
+      expect(finalizeParsed.frontmatter.schema_version).toBe('1.0.0');
     });
   });
 });

@@ -10,11 +10,11 @@ Current version: **1.0.0**
 
 The `schema_version` field enables future evolution without breaking existing artifacts.
 
-## Event Types
+## Modes
 
 Three entry points to the same core structure:
 
-| Event Type | Purpose | When to Use |
+| Mode | Purpose | When to Use |
 |------------|---------|-------------|
 | `checkpoint` | Mid-session state capture | Before risky operations, at milestones |
 | `handoff` | Session transfer | Ending session, handing off work |
@@ -24,8 +24,9 @@ Three entry points to the same core structure:
 
 ```yaml
 schema_version: "1.0.0"
-event_type: checkpoint | handoff | finalize
-timestamp: 2026-01-14T00:54:26.972Z
+mode: checkpoint | handoff | finalize
+date: 2026-01-14T00:54:26.972Z
+session: descriptive-session-name
 goal: One-line success criteria
 now: Current focus / immediate next action
 outcome: SUCCEEDED | PARTIAL_PLUS | PARTIAL_MINUS | FAILED
@@ -35,7 +36,6 @@ outcome: SUCCEEDED | PARTIAL_PLUS | PARTIAL_MINUS | FAILED
 
 ```yaml
 session_id: 77ef540c
-session_name: descriptive-session-name
 primary_bead: Continuous-Claude-v3-ug8.6   # required for handoff/finalize
 related_beads:
   - Continuous-Claude-v3-ug8.1
@@ -44,7 +44,7 @@ related_beads:
 ## Progress Tracking
 
 ```yaml
-this_session:
+done_this_session:
   - task: Implemented unified artifact writer
     files:
       - .claude/hooks/src/shared/artifact-writer.ts
@@ -63,17 +63,16 @@ questions:
   - Should we auto-push on finalize?
 ```
 
-## Decisions, Learnings, Findings
+## Decisions, Worked/Failed, Findings
 
 ```yaml
 decisions:
   decision_name: Rationale for this decision
 
-learnings:
-  worked:
-    - Unified schema reduces maintenance
-  failed:
-    - Markdown-only format was too unstructured
+worked:
+  - Unified schema reduces maintenance
+failed:
+  - Markdown-only format was too unstructured
 
 findings:
   key_finding: Details about this finding
@@ -142,15 +141,17 @@ artifacts_produced:
 ```yaml
 ---
 schema_version: "1.0.0"
-event_type: checkpoint
-timestamp: 2026-01-14T01:23:45.678Z
+mode: checkpoint
+date: 2026-01-14T01:23:45.678Z
+session: auth-refactor
 session_id: abc12345
-goal: Implement unified artifact writer
-now: Writing tests for schema validation
 outcome: PARTIAL_PLUS
 ---
 
-this_session:
+goal: Implement unified artifact writer
+now: Writing tests for schema validation
+
+done_this_session:
   - task: Added artifact schema
     files:
       - .claude/hooks/src/shared/artifact-schema.ts

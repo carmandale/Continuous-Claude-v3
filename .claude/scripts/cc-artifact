@@ -9,7 +9,8 @@ Options:
   --mode <type>           Required: checkpoint | handoff | finalize
   --bead <id>             Primary bead (required for handoff/finalize)
   --primary-bead <id>     Alias for --bead
-  --session-name <name>   Optional session name
+  --session-name <name>   Optional full session name (bead + slug)
+  --session-title <name>  Optional short human title (used to build session)
   --goal <text>           Optional goal (if omitted, placeholder is inserted)
   --now <text>            Optional current focus (if omitted, placeholder is inserted)
   --outcome <value>       Optional outcome (SUCCEEDED|PARTIAL_PLUS|PARTIAL_MINUS|FAILED)
@@ -21,8 +22,8 @@ Options:
 
 Examples:
   cc-artifact --mode checkpoint
-  cc-artifact --mode handoff --bead Continuous-Claude-v3-123
-  cc-artifact --mode finalize --bead Continuous-Claude-v3-123 --no-edit \
+  cc-artifact --mode handoff --bead Continuous-Claude-v3-123 --session-title "auth refactor"
+  cc-artifact --mode finalize --bead Continuous-Claude-v3-123 --session-title "auth refactor" --no-edit \
     --goal "Finalize unified artifacts" --now "All done" --outcome SUCCEEDED
 USAGE
 }
@@ -30,6 +31,7 @@ USAGE
 MODE=""
 PRIMARY_BEAD=""
 SESSION_NAME=""
+SESSION_TITLE=""
 GOAL=""
 NOW=""
 OUTCOME=""
@@ -45,6 +47,8 @@ while [[ $# -gt 0 ]]; do
       PRIMARY_BEAD="${2:-}"; shift 2 ;;
     --session-name|--session_name)
       SESSION_NAME="${2:-}"; shift 2 ;;
+    --session-title|--session_title)
+      SESSION_TITLE="${2:-}"; shift 2 ;;
     --goal)
       GOAL="${2:-}"; shift 2 ;;
     --now)
@@ -95,7 +99,7 @@ if git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
   PROJECT_DIR=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel)
 fi
 
-ARTIFACT_DIR="$PROJECT_DIR/thoughts/shared/handoffs/events"
+ARTIFACT_DIR="$PROJECT_DIR/thoughts/shared/handoffs"
 
 PYTHON_BIN=$(command -v python3 || command -v python || true)
 if [[ -z "$PYTHON_BIN" ]]; then
@@ -109,15 +113,45 @@ print(datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00
 PY
 )
 
-SESSION_ID=$("$PYTHON_BIN" - <<'PY'
-import secrets
-print(secrets.token_hex(4))
+slugify() {
+  echo "${1:-}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g'
+}
+
+if [[ -z "$SESSION_NAME" ]]; then
+  if [[ -n "$PRIMARY_BEAD" ]]; then
+    title_source="${SESSION_TITLE:-$GOAL}"
+    if [[ -z "$title_source" ]]; then
+      title_source="session"
+    fi
+    SESSION_NAME="${PRIMARY_BEAD}-$(slugify "$title_source")"
+  elif [[ -n "$SESSION_TITLE" ]]; then
+    SESSION_NAME="$(slugify "$SESSION_TITLE")"
+  else
+    echo "Error: --session-name (or --session-title) is required when no --bead is provided" >&2
+    exit 1
+  fi
+fi
+
+DATE_PART=$("$PYTHON_BIN" - <<PY
+from datetime import datetime
+import sys
+ts = "${TIMESTAMP}"
+dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+print(dt.strftime("%Y-%m-%d_%H-%M"))
 PY
 )
 
-SAFE_TIMESTAMP="${TIMESTAMP//:/-}"
-FILENAME="${SAFE_TIMESTAMP}_${SESSION_ID}.md"
-FILE_PATH="${OUTPUT_PATH:-$ARTIFACT_DIR/$FILENAME}"
+TITLE_SLUG="$(slugify "${SESSION_TITLE:-$GOAL}")"
+if [[ -n "$PRIMARY_BEAD" && "$SESSION_NAME" == "${PRIMARY_BEAD}-"* ]]; then
+  TITLE_SLUG="${SESSION_NAME#${PRIMARY_BEAD}-}"
+fi
+if [[ -z "$TITLE_SLUG" ]]; then
+  TITLE_SLUG="$(slugify "$SESSION_NAME")"
+fi
+TITLE_SLUG="$(slugify "$TITLE_SLUG")"
+
+FILENAME="${DATE_PART}_${TITLE_SLUG}_${MODE}.yaml"
+FILE_PATH="${OUTPUT_PATH:-$ARTIFACT_DIR/$SESSION_NAME/$FILENAME}"
 
 GIT_BRANCH=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
 GIT_COMMIT=$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)
@@ -136,19 +170,19 @@ OUTCOME_VALUE=${OUTCOME:-"<TODO>"}
 
 CONTENT="---\n"
 CONTENT+="schema_version: \"1.0.0\"\n"
-CONTENT+="event_type: ${MODE}\n"
-CONTENT+="timestamp: ${TIMESTAMP}\n"
-CONTENT+="session_id: ${SESSION_ID}\n"
-if [[ -n "$SESSION_NAME" ]]; then
-  CONTENT+="session_name: $(yaml_quote "$SESSION_NAME")\n"
-fi
+CONTENT+="mode: ${MODE}\n"
+CONTENT+="date: ${TIMESTAMP}\n"
+CONTENT+="session: $(yaml_quote "$SESSION_NAME")\n"
+CONTENT+="outcome: $(yaml_quote "$OUTCOME_VALUE")\n"
 if [[ -n "$PRIMARY_BEAD" ]]; then
   CONTENT+="primary_bead: $(yaml_quote "$PRIMARY_BEAD")\n"
 fi
+CONTENT+="---\n\n"
 CONTENT+="goal: $(yaml_quote "$GOAL_VALUE")\n"
 CONTENT+="now: $(yaml_quote "$NOW_VALUE")\n"
-CONTENT+="outcome: $(yaml_quote "$OUTCOME_VALUE")\n"
-
+CONTENT+="\n"
+CONTENT+="# Optional fields (YAML)\n"
+CONTENT+="# done_this_session:, next:, blockers:, questions:, decisions:, findings:, worked:, failed:, files:, test:, git:\n"
 if [[ -n "$GIT_BRANCH" || -n "$GIT_COMMIT" || -n "$GIT_REMOTE" ]]; then
   CONTENT+="git:\n"
   if [[ -n "$GIT_BRANCH" ]]; then
@@ -161,10 +195,6 @@ if [[ -n "$GIT_BRANCH" || -n "$GIT_COMMIT" || -n "$GIT_REMOTE" ]]; then
     CONTENT+="  remote: $(yaml_quote "$GIT_REMOTE")\n"
   fi
 fi
-
-CONTENT+="---\n\n"
-CONTENT+="# ${MODE^} Artifact\n\n"
-CONTENT+="# Add optional fields below as needed (this_session, next, blockers, questions, decisions, learnings, files, test, etc.)\n"
 
 if [[ "$STDOUT" -eq 1 ]]; then
   printf "%b" "$CONTENT"
@@ -204,17 +234,29 @@ for line in front:
     data[key.strip()] = value.strip().strip('"')
 
 missing = []
-for key in ("schema_version", "event_type", "timestamp", "goal", "now", "outcome"):
+for key in ("schema_version", "mode", "date", "session", "outcome"):
     value = data.get(key, "").strip()
     if not value or value in ("<TODO>", "TODO"):
         missing.append(key)
+
+body = text[match.end():]
+def extract_scalar(key):
+    m = re.search(rf"^{key}:\s*(.+)$", body, re.MULTILINE)
+    return m.group(1).strip().strip('"') if m else ""
+
+goal_value = extract_scalar("goal")
+now_value = extract_scalar("now")
+if not goal_value or goal_value in ("<TODO>", "TODO"):
+    missing.append("goal")
+if not now_value or now_value in ("<TODO>", "TODO"):
+    missing.append("now")
 
 if missing:
     print("Missing required fields: " + ", ".join(missing), file=sys.stderr)
     sys.exit(1)
 
-if data.get("event_type") != mode:
-    print(f"event_type mismatch: expected {mode}", file=sys.stderr)
+if data.get("mode") != mode:
+    print(f"mode mismatch: expected {mode}", file=sys.stderr)
     sys.exit(1)
 
 if mode in ("handoff", "finalize"):

@@ -1,8 +1,8 @@
 /**
  * Tests for handoff-index.ts functions
  *
- * Tests the updated extractSessionName function that supports both:
- * - New unified artifact format: YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
+ * Tests the updated extractSessionName function that supports:
+ * - Unified artifact path: thoughts/shared/handoffs/<session>/...
  * - Legacy format: .../handoffs/<session-name>/...
  */
 
@@ -11,21 +11,10 @@ import * as assert from 'node:assert';
 
 /**
  * Extract session name from handoff file path.
- * For unified artifacts, extracts session_id from filename.
- * Filename format: YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
- * For legacy artifacts, extracts from path: .../handoffs/<session-name>/...
+ * Unified artifacts live in thoughts/shared/handoffs/<session>/...
+ * Legacy artifacts also used this path-based convention.
  */
 function extractSessionName(filePath: string): string | null {
-  const filename = filePath.split(/[/\\]/).pop();
-  if (filename) {
-    // Try to extract session_id from unified filename format
-    const match = filename.match(/_([0-9a-f]{8})\.md$/);
-    if (match) {
-      return match[1];
-    }
-  }
-
-  // Fallback to legacy path-based extraction
   const parts = filePath.split(/[/\\]/);
   const handoffsIdx = parts.findIndex(p => p === 'handoffs');
   if (handoffsIdx >= 0 && handoffsIdx < parts.length - 1) {
@@ -38,8 +27,9 @@ function extractSessionName(filePath: string): string | null {
  * Extract frontmatter metadata from artifact content.
  */
 interface ArtifactFrontmatter {
-  event_type?: 'checkpoint' | 'handoff' | 'finalize';
+  mode?: 'checkpoint' | 'handoff' | 'finalize';
   schema_version?: string;
+  session?: string;
   session_id?: string;
 }
 
@@ -58,10 +48,12 @@ function extractFrontmatter(content: string): ArtifactFrontmatter {
     const match = line.match(/^(\w+):\s*(.+)$/);
     if (match) {
       const [, key, value] = match;
-      if (key === 'event_type') {
-        metadata.event_type = value as ArtifactFrontmatter['event_type'];
+      if (key === 'mode') {
+        metadata.mode = value as ArtifactFrontmatter['mode'];
       } else if (key === 'schema_version') {
         metadata.schema_version = value;
+      } else if (key === 'session') {
+        metadata.session = value;
       } else if (key === 'session_id') {
         metadata.session_id = value;
       }
@@ -72,22 +64,22 @@ function extractFrontmatter(content: string): ArtifactFrontmatter {
 }
 
 describe('extractSessionName', () => {
-  it('should extract session_id from unified artifact filename', () => {
-    const path = 'thoughts/shared/handoffs/events/2026-01-14T00-54-26.972Z_77ef540c.md';
+  it('should extract session name from unified artifact path', () => {
+    const path = 'thoughts/shared/handoffs/test-session/2026-01-14_00-54_checkpoint.yaml';
     const result = extractSessionName(path);
-    assert.strictEqual(result, '77ef540c');
+    assert.strictEqual(result, 'test-session');
   });
 
-  it('should extract session_id from absolute unified path', () => {
-    const path = '/Users/test/project/thoughts/shared/handoffs/events/2026-01-14T01-22-06.625Z_8c25a60a.md';
+  it('should extract session name from absolute unified path', () => {
+    const path = '/Users/test/project/thoughts/shared/handoffs/auth-refactor/2026-01-14_01-22_handoff.yaml';
     const result = extractSessionName(path);
-    assert.strictEqual(result, '8c25a60a');
+    assert.strictEqual(result, 'auth-refactor');
   });
 
-  it('should extract session_id from Windows unified path', () => {
-    const path = 'C:\\project\\thoughts\\shared\\handoffs\\events\\2026-01-14T02-03-24.473Z_ec035b62.md';
+  it('should extract session name from Windows unified path', () => {
+    const path = 'C:\\project\\thoughts\\shared\\handoffs\\bead-123-auth\\2026-01-14_02-03_handoff.yaml';
     const result = extractSessionName(path);
-    assert.strictEqual(result, 'ec035b62');
+    assert.strictEqual(result, 'bead-123-auth');
   });
 
   it('should fallback to legacy session name extraction', () => {
@@ -122,38 +114,40 @@ describe('extractSessionName', () => {
 });
 
 describe('extractFrontmatter', () => {
-  it('should extract event_type from frontmatter', () => {
+  it('should extract mode from frontmatter', () => {
     const content = `---
 schema_version: 1.0.0
-event_type: checkpoint
+mode: checkpoint
+session: test-session
 session_id: 77ef540c
 ---
 
 # Content here`;
 
     const result = extractFrontmatter(content);
-    assert.strictEqual(result.event_type, 'checkpoint');
+    assert.strictEqual(result.mode, 'checkpoint');
     assert.strictEqual(result.schema_version, '1.0.0');
+    assert.strictEqual(result.session, 'test-session');
     assert.strictEqual(result.session_id, '77ef540c');
   });
 
-  it('should extract handoff event_type', () => {
+  it('should extract handoff mode', () => {
     const content = `---
 schema_version: 1.0.0
-event_type: handoff
+mode: handoff
 ---`;
 
     const result = extractFrontmatter(content);
-    assert.strictEqual(result.event_type, 'handoff');
+    assert.strictEqual(result.mode, 'handoff');
   });
 
-  it('should extract finalize event_type', () => {
+  it('should extract finalize mode', () => {
     const content = `---
-event_type: finalize
+mode: finalize
 ---`;
 
     const result = extractFrontmatter(content);
-    assert.strictEqual(result.event_type, 'finalize');
+    assert.strictEqual(result.mode, 'finalize');
   });
 
   it('should return empty object for content without frontmatter', () => {
@@ -165,25 +159,25 @@ event_type: finalize
   it('should handle frontmatter with extra fields', () => {
     const content = `---
 schema_version: 1.0.0
-event_type: checkpoint
-timestamp: 2026-01-14T00:54:26.972Z
+mode: checkpoint
+date: 2026-01-14T00:54:26.972Z
 goal: Test the system
 ---`;
 
     const result = extractFrontmatter(content);
-    assert.strictEqual(result.event_type, 'checkpoint');
+    assert.strictEqual(result.mode, 'checkpoint');
     assert.strictEqual(result.schema_version, '1.0.0');
   });
 
   it('should ignore malformed lines in frontmatter', () => {
     const content = `---
-event_type: handoff
+mode: handoff
 invalid line without colon
 schema_version: 1.0.0
 ---`;
 
     const result = extractFrontmatter(content);
-    assert.strictEqual(result.event_type, 'handoff');
+    assert.strictEqual(result.mode, 'handoff');
     assert.strictEqual(result.schema_version, '1.0.0');
   });
 });

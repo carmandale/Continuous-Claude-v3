@@ -27,26 +27,28 @@ bd list --status=in_progress
 Preferred path: use the core generator script (handles timestamps + git metadata):
 
 ```bash
-~/.claude/scripts/cc-artifact --mode <checkpoint|handoff|finalize> [--bead <BEAD_ID>]
+~/.claude/scripts/cc-artifact --mode <checkpoint|handoff|finalize> [--bead <BEAD_ID>] [--session-title "<short title>"]
 ```
 
 Artifacts are written to:
 
 ```
-thoughts/shared/handoffs/events/YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
+thoughts/shared/handoffs/<session>/YYYY-MM-DD_HH-MM_<title>_<mode>.yaml
 ```
 
 **Filename format:**
-- `YYYY-MM-DDTHH-MM-SS.sssZ`: ISO timestamp with colons replaced by hyphens
-- `sessionid`: 8-character hex identifier
-- Example: `2026-01-14T01-23-45.678Z_abc12345.md`
+- `YYYY-MM-DD_HH-MM`: Date and time (UTC) with hyphen separators
+- `<title>`: Slugified session title (or derived from session)
+- `<mode>`: checkpoint | handoff | finalize
+- Example: `2026-01-14_01-23_auth-refactor_handoff.yaml`
 
 ### 3. Required Fields
 
 **Core fields (all artifacts):**
 - `schema_version`: "1.0.0"
-- `event_type`: "checkpoint" | "handoff" | "finalize"  ← this is the **mode**
-- `timestamp`: ISO 8601 timestamp (e.g., "2026-01-14T01:23:45.678Z")
+- `mode`: "checkpoint" | "handoff" | "finalize"
+- `date`: ISO 8601 date or date-time (e.g., "2026-01-14T01:23:45.678Z")
+- `session`: Session folder name (bead + slug)
 - `goal`: What this session accomplished
 - `now`: Current focus / next action
 - `outcome`: SUCCEEDED | PARTIAL_PLUS | PARTIAL_MINUS | FAILED
@@ -64,13 +66,13 @@ thoughts/shared/handoffs/events/YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
 
 **Optional but recommended:**
 - `session_id`: 8-char hex identifier
-- `session_name`: Descriptive session name
-- `this_session`: Array of completed tasks with files
+- `done_this_session`: Array of completed tasks with files
 - `next`: Array of next steps
 - `blockers`: Array of blocking issues
 - `questions`: Array of unresolved questions
 - `decisions`: Record of key decisions (simple format) or array of Decision objects
-- `learnings`: Object with `worked` and `failed` arrays
+- `worked`: What worked well
+- `failed`: What didn't work and why
 - `findings`: Record of key discoveries
 - `git`: Branch, commit, remote
 - `files`: Object with created, modified, deleted arrays
@@ -81,17 +83,18 @@ thoughts/shared/handoffs/events/YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
 ```yaml
 ---
 schema_version: "1.0.0"
-event_type: handoff
-timestamp: 2026-01-14T01:23:45.678Z
-session_id: abc12345
-session_name: descriptive-name
-goal: What this session accomplished
-now: What next session should do first
+mode: handoff
+date: 2026-01-14T01:23:45.678Z
+session: Continuous-Claude-v3-ug8.6-auth-refactor
 outcome: PARTIAL_PLUS
 primary_bead: Continuous-Claude-v3-ug8.6
+session_id: abc12345
 ---
 
-this_session:
+goal: What this session accomplished
+now: What next session should do first
+
+done_this_session:
   - task: First completed task
     files:
       - path/to/file1.ts
@@ -115,11 +118,10 @@ questions:
 decisions:
   decision_name: Rationale for this decision
 
-learnings:
-  worked:
-    - Approach that worked
-  failed:
-    - Approach that failed and why
+worked:
+  - Approach that worked
+failed:
+  - Approach that failed and why
 
 findings:
   key_finding: Details about this finding
@@ -175,7 +177,7 @@ Respond to the user:
 Artifact created! Outcome: [OUTCOME]
 
 Resume in a new session with:
-/resume_handoff thoughts/shared/handoffs/events/[filename]
+/resume_handoff thoughts/shared/handoffs/<session>/[filename]
 ```
 
 ---

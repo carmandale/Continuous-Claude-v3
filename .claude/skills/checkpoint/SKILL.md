@@ -39,11 +39,12 @@ import { writeArtifact } from './src/shared/artifact-writer.js';
 import { createArtifact } from './src/shared/artifact-schema.js';
 
 const artifact = createArtifact(
-  'checkpoint',  // event_type
+  'checkpoint',  // mode
   'Current progress on task',
   'What to focus on next',
   'PARTIAL_PLUS',  // or SUCCEEDED, PARTIAL_MINUS, FAILED
   {
+    session: 'auth-refactor',
     session_id: 'abc12345',
     primary_bead: 'beads-xxx',  // Optional - include if working on a bead
   }
@@ -58,17 +59,18 @@ const path = await writeArtifact(artifact);
 - `goal`: What you're working on in this session
 - `now`: Current focus / what's happening now
 - `outcome`: SUCCEEDED | PARTIAL_PLUS | PARTIAL_MINUS | FAILED
+- `session`: Session folder name (bead + slug)
 
 **Optional but recommended:**
 - `primary_bead`: Bead ID if working on one (optional for checkpoint)
 - `session_id`: 8-char hex identifier
-- `session_name`: Descriptive session name
-- `this_session`: Array of completed work so far
+- `done_this_session`: Array of completed work so far
 - `next`: What to do next
 - `blockers`: Current blockers or issues
 - `questions`: Open questions
 - `decisions`: Quick decisions made
-- `learnings`: What's working / what's not
+- `worked`: What worked well
+- `failed`: What didn't work and why
 - `git`: Branch, commit info
 - `files`: Files touched so far
 
@@ -76,13 +78,13 @@ const path = await writeArtifact(artifact);
 
 All checkpoint artifacts are written to:
 ```
-thoughts/shared/handoffs/events/YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
+thoughts/shared/handoffs/<session>/YYYY-MM-DD_HH-MM_<title>_checkpoint.yaml
 ```
 
 **Filename format:**
-- `YYYY-MM-DDTHH-MM-SS.sssZ`: ISO timestamp with colons replaced by hyphens
-- `sessionid`: 8-character hex identifier (generate random if not available)
-- Example: `2026-01-14T01-23-45.678Z_abc12345.md`
+- `YYYY-MM-DD_HH-MM`: Date and time (UTC)
+- `<title>`: Slugified session title
+- Example: `2026-01-14_01-23_auth-bug-investigation_checkpoint.yaml`
 
 ### 5. Using CLI Wrapper (Alternative)
 
@@ -94,11 +96,12 @@ node .claude/hooks/dist/write-checkpoint-cli.mjs \
   --goal "Current work description" \
   --now "Current focus" \
   --outcome PARTIAL_PLUS \
+  --session-title "auth-bug-investigation" \
   --primary_bead beads-xxx  # Optional
 ```
 
 The CLI will:
-1. Generate timestamp and session ID
+1. Generate date and session folder name
 2. Validate against schema
 3. Write to unified location
 4. Return the artifact path
@@ -120,15 +123,17 @@ Minimal checkpoint (just the essentials):
 ```yaml
 ---
 schema_version: "1.0.0"
-event_type: checkpoint
-timestamp: 2026-01-14T01:23:45.678Z
+mode: checkpoint
+date: 2026-01-14T01:23:45.678Z
+session: auth-bug-investigation
 session_id: abc12345
-goal: Investigating auth bug in login flow
-now: Tracing request through middleware chain
 outcome: PARTIAL_PLUS
 ---
 
-this_session:
+goal: Investigating auth bug in login flow
+now: Tracing request through middleware chain
+
+done_this_session:
   - task: Reproduced bug locally
     files:
       - src/auth/login.ts
@@ -151,17 +156,18 @@ Full checkpoint (with details):
 ```yaml
 ---
 schema_version: "1.0.0"
-event_type: checkpoint
-timestamp: 2026-01-14T01:23:45.678Z
+mode: checkpoint
+date: 2026-01-14T01:23:45.678Z
+session: auth-bug-investigation
 session_id: abc12345
-session_name: auth-bug-investigation
 primary_bead: beads-123
-goal: Fix authentication bug in login flow
-now: Testing middleware ordering hypothesis
 outcome: PARTIAL_PLUS
 ---
 
-this_session:
+goal: Fix authentication bug in login flow
+now: Testing middleware ordering hypothesis
+
+done_this_session:
   - task: Reproduced bug with specific user role
     files:
       - src/auth/login.ts
@@ -187,13 +193,12 @@ questions:
 decisions:
   middleware_order: Move auth check before rate limiting
 
-learnings:
-  worked:
-    - Debug logging revealed exact failure point
-    - Integration tests caught the regression
-  failed:
-    - Unit tests alone weren't sufficient
-    - Initial hypothesis about JWT was wrong
+worked:
+  - Debug logging revealed exact failure point
+  - Integration tests caught the regression
+failed:
+  - Unit tests alone weren't sufficient
+  - Initial hypothesis about JWT was wrong
 
 git:
   branch: fix/auth-middleware-order
@@ -215,8 +220,9 @@ All checkpoints are validated against the unified schema before writing. If vali
 
 Required by schema:
 - `schema_version`: "1.0.0"
-- `event_type`: "checkpoint"
-- `timestamp`: ISO 8601 string
+- `mode`: "checkpoint"
+- `date`: ISO 8601 date or date-time
+- `session`: session folder name
 - `goal`: non-empty string
 - `now`: non-empty string
 - `outcome`: one of the valid enum values

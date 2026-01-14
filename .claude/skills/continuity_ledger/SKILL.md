@@ -13,19 +13,20 @@ Create a unified artifact to preserve session state across `/clear` or session b
 Use the core generator:
 
 ```bash
-~/.claude/scripts/cc-artifact --mode <checkpoint|handoff|finalize> [--bead <BEAD_ID>]
+~/.claude/scripts/cc-artifact --mode <checkpoint|handoff|finalize> [--bead <BEAD_ID>] [--session-title "<short title>"]
 ```
 
 Artifacts are written to:
 ```
-thoughts/shared/handoffs/events/YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
+thoughts/shared/handoffs/<session>/YYYY-MM-DD_HH-MM_<title>_<mode>.yaml
 ```
 
 ## Required Fields
 
 - `schema_version`: "1.0.0"
-- `event_type`: checkpoint | handoff | finalize
-- `timestamp`: ISO 8601
+- `mode`: checkpoint | handoff | finalize
+- `date`: ISO 8601 date or date-time
+- `session`: Session folder name (bead + slug)
 - `goal`: What this session accomplished
 - `now`: Current focus / next action
 - `outcome`: SUCCEEDED | PARTIAL_PLUS | PARTIAL_MINUS | FAILED
@@ -49,7 +50,7 @@ After marking the outcome, confirm completion and provide the resume command:
 ```
 Artifact created! Outcome: [OUTCOME]
 
-/resume_handoff thoughts/shared/handoffs/events/[filename]
+/resume_handoff thoughts/shared/handoffs/<session>/[filename]
 ```
 
 For full details, follow `~/.claude/skills/create_handoff/SKILL.md`.

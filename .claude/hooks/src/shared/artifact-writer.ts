@@ -1,19 +1,8 @@
 /**
  * Unified artifact writer for checkpoint, handoff, and finalize events.
  *
- * Provides functions to write validated artifacts to disk in the correct
- * location with proper filename formatting.
- *
- * Design principles:
- * - Write to canonical location: thoughts/shared/handoffs/events/
- * - Use consistent filename format: YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
- * - Validate before writing
- * - Provide clear error messages on failure
- *
- * Related:
- * - Schema: artifact-schema.ts, artifact-schema.json
- * - Validation: artifact-validator.ts
- * - Plan: thoughts/shared/plans/2026-01-13-unified-artifact-system.md
+ * Writes YAML frontmatter + YAML body to session folders:
+ * thoughts/shared/handoffs/{session}/YYYY-MM-DD_HH-MM_<title>_<mode>.yaml
  */
 
 import { writeFile, mkdir } from 'fs/promises';
@@ -28,47 +17,74 @@ import { assertValidArtifact } from './artifact-validator.js';
 // =============================================================================
 
 /**
- * Canonical directory for all artifacts
+ * Canonical directory for all artifacts (session subfolders within)
  */
-export const ARTIFACT_DIR = 'thoughts/shared/handoffs/events';
+export const ARTIFACT_DIR = 'thoughts/shared/handoffs';
+
+const FRONTMATTER_KEYS = new Set([
+  'schema_version',
+  'mode',
+  'date',
+  'session',
+  'outcome',
+  'primary_bead',
+  'session_id',
+  'root_span_id',
+  'turn_span_id',
+]);
 
 // =============================================================================
 // Filename Generation
 // =============================================================================
 
-/**
- * Generate filename for artifact
- *
- * Format: YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
- *
- * @param timestamp - ISO 8601 timestamp
- * @param sessionId - Session identifier
- * @returns Filename
- *
- * @example
- * generateFilename('2026-01-14T00:54:26.972Z', '77ef540c')
- * // => '2026-01-14T00-54-26.972Z_77ef540c.md'
- */
-export function generateFilename(timestamp: string, sessionId?: string): string {
-  // Convert ISO timestamp to filename-safe format
-  // 2026-01-14T00:54:26.972Z => 2026-01-14T00-54-26.972Z
-  const fileTimestamp = timestamp
-    .replace(/:/g, '-')  // Replace colons with hyphens
-    .replace(/\.\d{3}Z$/, (ms) => ms);  // Keep milliseconds
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'session';
+}
 
-  // Generate session ID if not provided
-  const id = sessionId || generateSessionId();
+function formatDateForFilename(dateValue: string): string {
+  // Accept date or date-time. Default time to 00-00 if missing.
+  const match = dateValue.match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+  if (match) {
+    const [, date, hour, minute] = match;
+    const hh = hour || '00';
+    const mm = minute || '00';
+    return `${date}_${hh}-${mm}`;
+  }
 
-  return `${fileTimestamp}_${id}.md`;
+  // Fallback to current UTC time
+  const now = new Date();
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(now.getUTCDate()).padStart(2, '0');
+  const hh = String(now.getUTCHours()).padStart(2, '0');
+  const min = String(now.getUTCMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}_${hh}-${min}`;
+}
+
+function getTitleSlug(artifact: UnifiedArtifact): string {
+  const session = artifact.session || 'session';
+  const bead = artifact.primary_bead;
+
+  if (bead && session.startsWith(`${bead}-`)) {
+    return slugify(session.slice(bead.length + 1));
+  }
+
+  return slugify(session);
 }
 
 /**
- * Generate a random 8-character session ID
+ * Generate filename for artifact
  *
- * @returns Session ID in format: [0-9a-f]{8}
+ * Format: YYYY-MM-DD_HH-MM_<title>_<mode>.yaml
  */
-function generateSessionId(): string {
-  return Math.random().toString(16).slice(2, 10).padEnd(8, '0');
+export function generateFilename(artifact: UnifiedArtifact): string {
+  const datePart = formatDateForFilename(artifact.date);
+  const titleSlug = getTitleSlug(artifact);
+  return `${datePart}_${titleSlug}_${artifact.mode}.yaml`;
 }
 
 // =============================================================================
@@ -76,52 +92,61 @@ function generateSessionId(): string {
 // =============================================================================
 
 /**
- * Convert artifact to YAML string with frontmatter
- *
- * @param artifact - Validated artifact
- * @returns Markdown content with YAML frontmatter
- *
- * @example
- * const yaml = formatArtifactYaml(artifact);
- * // ---
- * // schema_version: "1.0.0"
- * // event_type: checkpoint
- * // ...
- * // ---
+ * Convert artifact to YAML frontmatter + YAML body
  */
 export function formatArtifactYaml(artifact: UnifiedArtifact): string {
-  const yamlContent = YAML.stringify(artifact, {
-    lineWidth: 0,  // Don't wrap long lines
-    defaultStringType: 'PLAIN',  // Don't quote simple strings
-    defaultKeyType: 'PLAIN',  // Plain keys (no quotes)
-  });
+  const frontmatter: Record<string, unknown> = {};
+  const body: Record<string, unknown> = {};
 
-  return `---\n${yamlContent}---\n`;
+  for (const [key, value] of Object.entries(artifact)) {
+    if (value === undefined) continue;
+    if (FRONTMATTER_KEYS.has(key)) {
+      frontmatter[key] = value;
+    } else {
+      body[key] = value;
+    }
+  }
+
+  const front = YAML.stringify(frontmatter, {
+    lineWidth: 0,
+    defaultStringType: 'PLAIN',
+    defaultKeyType: 'PLAIN',
+  }).trimEnd();
+
+  const bodyYaml = YAML.stringify(body, {
+    lineWidth: 0,
+    defaultStringType: 'PLAIN',
+    defaultKeyType: 'PLAIN',
+  }).trimEnd();
+
+  if (bodyYaml) {
+    return `---\n${front}\n---\n\n${bodyYaml}\n`;
+  }
+
+  return `---\n${front}\n---\n`;
 }
 
 // =============================================================================
 // Path Resolution
 // =============================================================================
 
+function getSessionDir(artifact: UnifiedArtifact, baseDir: string): string {
+  return join(baseDir, ARTIFACT_DIR, artifact.session);
+}
+
 /**
  * Resolve absolute path for artifact file
- *
- * @param filename - Artifact filename
- * @param baseDir - Base directory (defaults to process.cwd())
- * @returns Absolute path to artifact file
  */
-export function resolveArtifactPath(filename: string, baseDir: string = process.cwd()): string {
-  return join(baseDir, ARTIFACT_DIR, filename);
+export function resolveArtifactPath(artifact: UnifiedArtifact, baseDir: string = process.cwd()): string {
+  const filename = generateFilename(artifact);
+  return join(getSessionDir(artifact, baseDir), filename);
 }
 
 /**
  * Ensure artifact directory exists
- *
- * @param baseDir - Base directory (defaults to process.cwd())
- * @throws Error if directory creation fails
  */
-export async function ensureArtifactDir(baseDir: string = process.cwd()): Promise<void> {
-  const dirPath = join(baseDir, ARTIFACT_DIR);
+export async function ensureArtifactDir(artifact: UnifiedArtifact, baseDir: string = process.cwd()): Promise<void> {
+  const dirPath = getSessionDir(artifact, baseDir);
 
   if (!existsSync(dirPath)) {
     await mkdir(dirPath, { recursive: true });
@@ -134,23 +159,6 @@ export async function ensureArtifactDir(baseDir: string = process.cwd()): Promis
 
 /**
  * Write artifact to disk
- *
- * This is the main entry point for writing artifacts. It:
- * 1. Validates the artifact against the JSON Schema
- * 2. Generates the filename from timestamp and session_id
- * 3. Formats the artifact as YAML with frontmatter
- * 4. Ensures the target directory exists
- * 5. Writes the file to disk
- *
- * @param artifact - Artifact to write (must pass validation)
- * @param options - Write options
- * @returns Path to written file
- * @throws Error if validation fails or write fails
- *
- * @example
- * const artifact = createArtifact('checkpoint', 'Fix auth bug', 'Debugging', 'PARTIAL_PLUS');
- * const path = await writeArtifact(artifact);
- * console.log(`Artifact written to: ${path}`);
  */
 export async function writeArtifact(
   artifact: UnifiedArtifact,
@@ -159,28 +167,18 @@ export async function writeArtifact(
     dryRun?: boolean;
   }
 ): Promise<string> {
-  // Step 1: Validate artifact
   assertValidArtifact(artifact);
 
-  // Step 2: Generate filename
-  const filename = generateFilename(artifact.timestamp, artifact.session_id);
-
-  // Step 3: Format as YAML
   const content = formatArtifactYaml(artifact);
-
-  // Step 4: Resolve path
   const baseDir = options?.baseDir || process.cwd();
-  const filePath = resolveArtifactPath(filename, baseDir);
+  const filePath = resolveArtifactPath(artifact, baseDir);
 
-  // Step 5: Dry run check
   if (options?.dryRun) {
     return filePath;
   }
 
-  // Step 6: Ensure directory exists
-  await ensureArtifactDir(baseDir);
+  await ensureArtifactDir(artifact, baseDir);
 
-  // Step 7: Write file
   try {
     await writeFile(filePath, content, 'utf-8');
     return filePath;
@@ -192,12 +190,6 @@ export async function writeArtifact(
 
 /**
  * Write artifact and return both path and content
- *
- * Useful for testing or when you need to verify what was written.
- *
- * @param artifact - Artifact to write
- * @param options - Write options
- * @returns Object with path and content
  */
 export async function writeArtifactWithContent(
   artifact: UnifiedArtifact,
@@ -208,16 +200,15 @@ export async function writeArtifactWithContent(
 ): Promise<{ path: string; content: string }> {
   assertValidArtifact(artifact);
 
-  const filename = generateFilename(artifact.timestamp, artifact.session_id);
   const content = formatArtifactYaml(artifact);
   const baseDir = options?.baseDir || process.cwd();
-  const filePath = resolveArtifactPath(filename, baseDir);
+  const filePath = resolveArtifactPath(artifact, baseDir);
 
   if (options?.dryRun) {
     return { path: filePath, content };
   }
 
-  await ensureArtifactDir(baseDir);
+  await ensureArtifactDir(artifact, baseDir);
 
   try {
     await writeFile(filePath, content, 'utf-8');
@@ -232,27 +223,11 @@ export async function writeArtifactWithContent(
 // Convenience Functions
 // =============================================================================
 
-/**
- * Check if artifact file already exists
- *
- * @param artifact - Artifact to check
- * @param baseDir - Base directory (defaults to process.cwd())
- * @returns True if file exists
- */
 export function artifactExists(artifact: UnifiedArtifact, baseDir: string = process.cwd()): boolean {
-  const filename = generateFilename(artifact.timestamp, artifact.session_id);
-  const filePath = resolveArtifactPath(filename, baseDir);
+  const filePath = resolveArtifactPath(artifact, baseDir);
   return existsSync(filePath);
 }
 
-/**
- * Get the file path that would be used for an artifact (without writing)
- *
- * @param artifact - Artifact to get path for
- * @param baseDir - Base directory (defaults to process.cwd())
- * @returns Full path where artifact would be written
- */
 export function getArtifactPath(artifact: UnifiedArtifact, baseDir: string = process.cwd()): string {
-  const filename = generateFilename(artifact.timestamp, artifact.session_id);
-  return resolveArtifactPath(filename, baseDir);
+  return resolveArtifactPath(artifact, baseDir);
 }

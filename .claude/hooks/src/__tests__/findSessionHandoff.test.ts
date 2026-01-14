@@ -53,30 +53,30 @@ describe('findSessionHandoff', () => {
     assert.strictEqual(result, null, 'Should return null when session directory does not exist');
   });
 
-  it('should return null for empty directory (no .md files)', () => {
+  it('should return null for empty directory (no .yaml files)', () => {
     // Create the handoff directory but leave it empty
     const handoffDir = path.join(testDir, 'thoughts', 'shared', 'handoffs', 'empty-session');
     fs.mkdirSync(handoffDir, { recursive: true });
 
     const result = findSessionHandoff('empty-session');
 
-    assert.strictEqual(result, null, 'Should return null when directory has no .md files');
+    assert.strictEqual(result, null, 'Should return null when directory has no .yaml files');
   });
 
-  it('should return null for directory with only non-.md files', () => {
-    // Create directory with non-.md files only
+  it('should return null for directory with only non-.yaml files', () => {
+    // Create directory with non-.yaml files only
     const sessionName = 'non-md-session';
     const handoffDir = path.join(testDir, 'thoughts', 'shared', 'handoffs', sessionName);
     fs.mkdirSync(handoffDir, { recursive: true });
 
-    // Create some non-.md files
+    // Create some non-.yaml files
     fs.writeFileSync(path.join(handoffDir, 'notes.txt'), 'some notes');
     fs.writeFileSync(path.join(handoffDir, 'data.json'), '{}');
     fs.writeFileSync(path.join(handoffDir, '.gitkeep'), '');
 
     const result = findSessionHandoff(sessionName);
 
-    assert.strictEqual(result, null, 'Should return null when no .md files exist');
+    assert.strictEqual(result, null, 'Should return null when no .yaml files exist');
   });
 
   it('should return the most recent handoff by mtime', async () => {
@@ -85,14 +85,14 @@ describe('findSessionHandoff', () => {
     fs.mkdirSync(handoffDir, { recursive: true });
 
     // Create older file first
-    const olderFile = path.join(handoffDir, '2025-12-29_handoff.md');
+    const olderFile = path.join(handoffDir, '2025-12-29_handoff.yaml');
     fs.writeFileSync(olderFile, '# Older handoff');
 
     // Wait a bit to ensure different mtimes
     await new Promise(resolve => setTimeout(resolve, 50));
 
     // Create newer file
-    const newerFile = path.join(handoffDir, '2025-12-30_handoff.md');
+    const newerFile = path.join(handoffDir, '2025-12-30_handoff.yaml');
     fs.writeFileSync(newerFile, '# Newer handoff');
 
     const result = findSessionHandoff(sessionName);
@@ -101,62 +101,62 @@ describe('findSessionHandoff', () => {
     assert.strictEqual(result, newerFile, 'Should return the most recent file by mtime');
   });
 
-  it('should return current.md if it is the most recent (by mtime)', async () => {
+  it('should return current.yaml if it is the most recent (by mtime)', async () => {
     const sessionName = 'current-session';
     const handoffDir = path.join(testDir, 'thoughts', 'shared', 'handoffs', sessionName);
     fs.mkdirSync(handoffDir, { recursive: true });
 
     // Create an older timestamped file
-    const olderFile = path.join(handoffDir, '2025-12-28_old-handoff.md');
+    const olderFile = path.join(handoffDir, '2025-12-28_old-handoff.yaml');
     fs.writeFileSync(olderFile, '# Old handoff');
 
     // Wait to ensure different mtimes
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    // Create current.md as the most recent
-    const currentFile = path.join(handoffDir, 'current.md');
+    // Create current.yaml as the most recent
+    const currentFile = path.join(handoffDir, 'current.yaml');
     fs.writeFileSync(currentFile, '# Current handoff');
 
     const result = findSessionHandoff(sessionName);
 
     assert.notStrictEqual(result, null, 'Should return a path');
-    assert.strictEqual(result, currentFile, 'Should return current.md when it is most recent');
+    assert.strictEqual(result, currentFile, 'Should return current.yaml when it is most recent');
   });
 
-  it('should handle single .md file correctly', () => {
+  it('should handle single .yaml file correctly', () => {
     const sessionName = 'single-file-session';
     const handoffDir = path.join(testDir, 'thoughts', 'shared', 'handoffs', sessionName);
     fs.mkdirSync(handoffDir, { recursive: true });
 
-    const singleFile = path.join(handoffDir, 'only-handoff.md');
+    const singleFile = path.join(handoffDir, 'only-handoff.yaml');
     fs.writeFileSync(singleFile, '# The only handoff');
 
     const result = findSessionHandoff(sessionName);
 
     assert.notStrictEqual(result, null, 'Should return a path');
-    assert.strictEqual(result, singleFile, 'Should return the only .md file');
+    assert.strictEqual(result, singleFile, 'Should return the only .yaml file');
   });
 
-  it('should ignore non-.md files when selecting most recent', async () => {
+  it('should ignore non-.yaml files when selecting most recent', async () => {
     const sessionName = 'mixed-files-session';
     const handoffDir = path.join(testDir, 'thoughts', 'shared', 'handoffs', sessionName);
     fs.mkdirSync(handoffDir, { recursive: true });
 
-    // Create older .md file
-    const mdFile = path.join(handoffDir, 'handoff.md');
+    // Create older .yaml file
+    const mdFile = path.join(handoffDir, 'handoff.yaml');
     fs.writeFileSync(mdFile, '# Handoff');
 
     // Wait to ensure different mtimes
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    // Create newer non-.md files (should be ignored)
+    // Create newer non-.yaml files (should be ignored)
     fs.writeFileSync(path.join(handoffDir, 'newer-notes.txt'), 'notes');
     fs.writeFileSync(path.join(handoffDir, 'even-newer.json'), '{}');
 
     const result = findSessionHandoff(sessionName);
 
     assert.notStrictEqual(result, null, 'Should return a path');
-    assert.strictEqual(result, mdFile, 'Should return the .md file, ignoring non-.md files');
+    assert.strictEqual(result, mdFile, 'Should return the .yaml file, ignoring non-.yaml files');
   });
 
   it('should return absolute path to the handoff file', () => {
@@ -164,14 +164,14 @@ describe('findSessionHandoff', () => {
     const handoffDir = path.join(testDir, 'thoughts', 'shared', 'handoffs', sessionName);
     fs.mkdirSync(handoffDir, { recursive: true });
 
-    const handoffFile = path.join(handoffDir, 'handoff.md');
+    const handoffFile = path.join(handoffDir, 'handoff.yaml');
     fs.writeFileSync(handoffFile, '# Handoff content');
 
     const result = findSessionHandoff(sessionName);
 
     assert.notStrictEqual(result, null, 'Should return a path');
     assert.ok(path.isAbsolute(result!), 'Should return an absolute path');
-    assert.ok(result!.endsWith('.md'), 'Path should end with .md');
+    assert.ok(result!.endsWith('.yaml'), 'Path should end with .yaml');
   });
 
   it('should handle session name with special characters', () => {
@@ -180,7 +180,7 @@ describe('findSessionHandoff', () => {
     const handoffDir = path.join(testDir, 'thoughts', 'shared', 'handoffs', sessionName);
     fs.mkdirSync(handoffDir, { recursive: true });
 
-    const handoffFile = path.join(handoffDir, 'current.md');
+    const handoffFile = path.join(handoffDir, 'current.yaml');
     fs.writeFileSync(handoffFile, '# Handoff');
 
     const result = findSessionHandoff(sessionName);
@@ -195,7 +195,7 @@ describe('findSessionHandoff', () => {
     const handoffDir = path.join(testDir, 'thoughts', 'shared', 'handoffs', sessionName);
     fs.mkdirSync(handoffDir, { recursive: true });
 
-    const handoffFile = path.join(handoffDir, 'handoff.md');
+    const handoffFile = path.join(handoffDir, 'handoff.yaml');
     fs.writeFileSync(handoffFile, '# Handoff');
 
     const result = findSessionHandoff(sessionName);
@@ -294,7 +294,7 @@ describe('findSessionHandoffWithUUID', () => {
     const dirName = 'auth-refactor-550e8400';
     const handoffDir = path.join(testDir, 'thoughts', 'shared', 'handoffs', dirName);
     fs.mkdirSync(handoffDir, { recursive: true });
-    fs.writeFileSync(path.join(handoffDir, 'current.md'), '# Handoff');
+    fs.writeFileSync(path.join(handoffDir, 'current.yaml'), '# Handoff');
 
     const result = findSessionHandoffWithUUID('auth-refactor', sessionId);
 
@@ -307,7 +307,7 @@ describe('findSessionHandoffWithUUID', () => {
     // Create legacy directory (no UUID suffix)
     const handoffDir = path.join(testDir, 'thoughts', 'shared', 'handoffs', 'auth-refactor');
     fs.mkdirSync(handoffDir, { recursive: true });
-    fs.writeFileSync(path.join(handoffDir, 'current.md'), '# Legacy handoff');
+    fs.writeFileSync(path.join(handoffDir, 'current.yaml'), '# Legacy handoff');
 
     const result = findSessionHandoffWithUUID('auth-refactor', sessionId);
 
@@ -322,14 +322,14 @@ describe('findSessionHandoffWithUUID', () => {
     // Create legacy directory first
     const legacyDir = path.join(testDir, 'thoughts', 'shared', 'handoffs', 'auth-refactor');
     fs.mkdirSync(legacyDir, { recursive: true });
-    fs.writeFileSync(path.join(legacyDir, 'current.md'), '# Legacy');
+    fs.writeFileSync(path.join(legacyDir, 'current.yaml'), '# Legacy');
 
     await new Promise(resolve => setTimeout(resolve, 50));
 
     // Create UUID-suffixed directory
     const uuidDir = path.join(testDir, 'thoughts', 'shared', 'handoffs', 'auth-refactor-550e8400');
     fs.mkdirSync(uuidDir, { recursive: true });
-    fs.writeFileSync(path.join(uuidDir, 'current.md'), '# UUID handoff');
+    fs.writeFileSync(path.join(uuidDir, 'current.yaml'), '# UUID handoff');
 
     const result = findSessionHandoffWithUUID('auth-refactor', sessionId);
 
@@ -342,7 +342,7 @@ describe('findSessionHandoffWithUUID', () => {
     // Create a different UUID's directory for same session name
     const otherDir = path.join(testDir, 'thoughts', 'shared', 'handoffs', 'auth-refactor-11111111');
     fs.mkdirSync(otherDir, { recursive: true });
-    fs.writeFileSync(path.join(otherDir, 'current.md'), '# Other session');
+    fs.writeFileSync(path.join(otherDir, 'current.yaml'), '# Other session');
 
     const result = findSessionHandoffWithUUID('auth-refactor', sessionId);
 

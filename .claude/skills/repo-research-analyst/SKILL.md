@@ -251,7 +251,7 @@ Task(
   [Optional: specific areas to investigate, e.g., "focus on API patterns"]
 
   ### Handoff Directory:
-  thoughts/shared/handoffs/events/
+  thoughts/shared/handoffs/<session>/
 
   ---
 

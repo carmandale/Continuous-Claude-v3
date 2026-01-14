@@ -8,7 +8,7 @@ This command uses the unified artifact generator: `~/.claude/scripts/cc-artifact
 
 ## Requirements
 - **Bead REQUIRED**
-- Artifact must be written to `thoughts/shared/handoffs/events/`
+- Artifact must be written to `thoughts/shared/handoffs/<session>/`
 - Outcome is required
 - Commit + push required
 
@@ -22,7 +22,7 @@ If none: STOP and ask the user which bead to finalize (or create one).
 
 ### 2) Generate the finalize artifact
 ```bash
-~/.claude/scripts/cc-artifact --mode finalize --bead <BEAD_ID>
+~/.claude/scripts/cc-artifact --mode finalize --bead <BEAD_ID> [--session-title "<short title>"]
 ```
 Fill in `goal`, `now`, and `outcome`. Capture `final_solutions`, `final_decisions`, and `artifacts_produced`.
 
@@ -36,7 +36,7 @@ bd close <BEAD_ID> --reason "Completed"
 
 ### 5) Commit + push
 ```bash
-git add thoughts/shared/handoffs/events/*.md
+git add thoughts/shared/handoffs/*/*.yaml
 git commit -m "finalize: <short description>"
 git push
 ```

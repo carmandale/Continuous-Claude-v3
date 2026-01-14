@@ -284,7 +284,7 @@ SessionStart                    Working                      SessionEnd
            │                           │ 3. PRE-COMPACT     │
            │                           │                    │
            │                           │  Auto-handoff ─────┼──▶ thoughts/shared/
-           │                           │  (YAML format)     │    handoffs/events/*.md
+           │                           │  (YAML format)     │    handoffs/<session>/*.yaml
            │                           │  Dirty > 20? ──────┼──▶ TLDR re-index
            │                           │                    │
            │                           └────────────────────┘
@@ -390,7 +390,7 @@ SessionStart                    Working                      SessionEnd
 │                                          │ ├── ledgers/           │         │
 │                                          │ │   └── CONTINUITY_*.md│         │
 │                                          │ └── shared/            │         │
-│                                          │     ├── handoffs/events/*.md│   │
+│                                          │     ├── handoffs/<session>/*.yaml│   │
 │                                          │     └── plans/*.md     │         │
 │                                          │                        │         │
 │                                          │ .tldr/                 │         │
@@ -771,22 +771,24 @@ Implement feature X with proper error handling
 
 #### Handoffs
 
-Between-session knowledge transfer. Location: `thoughts/shared/handoffs/events/`
+Between-session knowledge transfer. Location: `thoughts/shared/handoffs/<session>/`
 
-All artifacts (checkpoint, handoff, finalize) use the same unified format and are stored in `thoughts/shared/handoffs/events/` with timestamped filenames like `2026-01-14T00-54-26.972Z_77ef540c.md`.
+All artifacts (checkpoint, handoff, finalize) use the same unified format and are stored in session folders with filenames like `2026-01-14_00-54_feature-x_handoff.yaml`.
 
 ```yaml
 ---
 schema_version: "1.0.0"
-event_type: handoff
-timestamp: 2026-01-14T00:54:26.972Z
-session_id: 77ef540c
-goal: Feature X implementation with proper error handling
-now: Add retry logic and integration tests
+mode: handoff
+date: 2026-01-14T00:54:26.972Z
+session: feature-x
 outcome: PARTIAL_PLUS
+primary_bead: Continuous-Claude-v3-abc.1
 ---
 
-this_session:
+goal: Feature X implementation with proper error handling
+now: Add retry logic and integration tests
+
+done_this_session:
   - task: Design API schema
     files: [api/schema.py, api/types.py]
   - task: Implement core logic

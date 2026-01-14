@@ -32,6 +32,35 @@ Invoke via absolute path (`~/.claude/scripts/cc-artifact`) or add that directory
 - **Notes**: Updated `cc-artifact` to detect and use python3/python.
 
 ---
+## [ERR-20260114-003] agentmail-macro-start-session
+
+**Logged**: 2026-01-14T12:03:02Z
+**Priority**: medium
+**Status**: pending
+**Area**: infra
+
+### Summary
+`macro_start_session` failed with "Too many open files" when starting Agent Mail session.
+
+### Error
+```
+Error calling tool 'macro_start_session': Too many open files. Freed 1 cached repos. Retry the operation.
+```
+
+### Context
+- Command: `macro_start_session` (Agent Mail)
+- Input: project path `/Users/dalecarman/Groove Jones Dropbox/Dale Carman/Projects/dev/Continuous-Claude-v3`
+- Environment: local agent mail server (sqlite)
+
+### Suggested Fix
+Retry the operation after cache cleanup; investigate Agent Mail repo caching limits if recurring.
+
+### Metadata
+- Reproducible: unknown
+- Related Files: N/A
+- Source: error
+
+---
 ## [ERR-20260114-002] cc-artifact-python
 
 **Logged**: 2026-01-14T03:16:45Z

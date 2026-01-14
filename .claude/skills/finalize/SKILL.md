@@ -40,12 +40,13 @@ import { writeArtifact } from './src/shared/artifact-writer.js';
 import { createArtifact } from './src/shared/artifact-schema.js';
 
 const artifact = createArtifact(
-  'finalize',  // event_type
+  'finalize',  // mode
   'Goal achieved in this session',
   'Work is complete',
   'SUCCEEDED',  // or PARTIAL_PLUS, PARTIAL_MINUS, FAILED
   {
     primary_bead: 'beads-xxx',
+    session: 'beads-xxx-auth-refactor',
     session_id: 'abc12345',
   }
 );
@@ -78,6 +79,7 @@ const path = await writeArtifact(artifact);
 - `now`: Final status / closure statement
 - `outcome`: SUCCEEDED | PARTIAL_PLUS | PARTIAL_MINUS | FAILED
 - `primary_bead`: The bead being finalized (REQUIRED for finalize)
+- `session`: Session folder name (bead + slug)
 
 **Finalize-specific fields:**
 - `final_solutions`: Array of problem/solution/rationale
@@ -85,9 +87,10 @@ const path = await writeArtifact(artifact);
 - `artifacts_produced`: Files created/modified with notes
 
 **Optional but recommended:**
-- `this_session`: Array of completed tasks with files
+- `done_this_session`: Array of completed tasks with files
 - `decisions`: Record of key decisions (can use simpler format)
-- `learnings`: What worked / what failed
+- `worked`: What worked well
+- `failed`: What didn't work and why
 - `findings`: Key discoveries
 - `git`: Branch, commit, PR status
 - `files`: created, modified, deleted arrays
@@ -96,10 +99,10 @@ const path = await writeArtifact(artifact);
 
 All finalize artifacts are written to:
 ```
-thoughts/shared/handoffs/events/YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
+thoughts/shared/handoffs/<session>/YYYY-MM-DD_HH-MM_<title>_finalize.yaml
 ```
 
-Format: YAML frontmatter with event metadata
+Format: YAML frontmatter + YAML body (no Markdown body)
 
 ### 5. Mark Outcome (Optional)
 
@@ -128,7 +131,7 @@ Finalize document created! Session closed with outcome: [OUTCOME].
 
 Bead <bead-id> marked as complete.
 
-Artifact location: thoughts/shared/handoffs/events/[filename]
+Artifact location: thoughts/shared/handoffs/<session>/[filename]
 ```
 
 ---
@@ -138,17 +141,18 @@ Artifact location: thoughts/shared/handoffs/events/[filename]
 ```yaml
 ---
 schema_version: "1.0.0"
-event_type: finalize
-timestamp: 2026-01-14T01:23:45.678Z
+mode: finalize
+date: 2026-01-14T01:23:45.678Z
+session: unified-artifact-system
 session_id: abc12345
-session_name: unified-artifact-system
-goal: Implement unified artifact system with finalize support
-now: System complete and tested
 outcome: SUCCEEDED
 primary_bead: Continuous-Claude-v3-ug8.7
 ---
 
-this_session:
+goal: Implement unified artifact system with finalize support
+now: System complete and tested
+
+done_this_session:
   - task: Created finalize skill
     files:
       - .claude/skills/finalize/SKILL.md
@@ -175,12 +179,11 @@ artifacts_produced:
   - path: .claude/hooks/src/shared/artifact-schema.ts
     note: TypeScript schema definitions
 
-learnings:
-  worked:
-    - Unified schema approach reduces maintenance
-    - JSON Schema validation catches errors early
-  failed:
-    - Initial attempt at markdown-only format was too unstructured
+worked:
+  - Unified schema approach reduces maintenance
+  - JSON Schema validation catches errors early
+failed:
+  - Initial attempt at markdown-only format was too unstructured
 
 git:
   branch: feat/continuity-system

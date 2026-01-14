@@ -132,47 +132,106 @@ function assertValidArtifact(artifact) {
 }
 
 // src/shared/artifact-writer.ts
-var ARTIFACT_DIR = "thoughts/shared/handoffs/events";
-function generateFilename(timestamp, sessionId) {
-  const fileTimestamp = timestamp.replace(/:/g, "-").replace(/\.\d{3}Z$/, (ms) => ms);
-  const id = sessionId || generateSessionId();
-  return `${fileTimestamp}_${id}.md`;
+var ARTIFACT_DIR = "thoughts/shared/handoffs";
+var FRONTMATTER_KEYS = /* @__PURE__ */ new Set([
+  "schema_version",
+  "mode",
+  "date",
+  "session",
+  "outcome",
+  "primary_bead",
+  "session_id",
+  "root_span_id",
+  "turn_span_id"
+]);
+function slugify(value) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "session";
 }
-function generateSessionId() {
-  return Math.random().toString(16).slice(2, 10).padEnd(8, "0");
+function formatDateForFilename(dateValue) {
+  const match = dateValue.match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+  if (match) {
+    const [, date, hour, minute] = match;
+    const hh2 = hour || "00";
+    const mm2 = minute || "00";
+    return `${date}_${hh2}-${mm2}`;
+  }
+  const now = /* @__PURE__ */ new Date();
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(now.getUTCDate()).padStart(2, "0");
+  const hh = String(now.getUTCHours()).padStart(2, "0");
+  const min = String(now.getUTCMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}_${hh}-${min}`;
+}
+function getTitleSlug(artifact) {
+  const session = artifact.session || "session";
+  const bead = artifact.primary_bead;
+  if (bead && session.startsWith(`${bead}-`)) {
+    return slugify(session.slice(bead.length + 1));
+  }
+  return slugify(session);
+}
+function generateFilename(artifact) {
+  const datePart = formatDateForFilename(artifact.date);
+  const titleSlug = getTitleSlug(artifact);
+  return `${datePart}_${titleSlug}_${artifact.mode}.yaml`;
 }
 function formatArtifactYaml(artifact) {
-  const yamlContent = YAML.stringify(artifact, {
+  const frontmatter = {};
+  const body = {};
+  for (const [key, value] of Object.entries(artifact)) {
+    if (value === void 0) continue;
+    if (FRONTMATTER_KEYS.has(key)) {
+      frontmatter[key] = value;
+    } else {
+      body[key] = value;
+    }
+  }
+  const front = YAML.stringify(frontmatter, {
     lineWidth: 0,
-    // Don't wrap long lines
     defaultStringType: "PLAIN",
-    // Don't quote simple strings
     defaultKeyType: "PLAIN"
-    // Plain keys (no quotes)
-  });
+  }).trimEnd();
+  const bodyYaml = YAML.stringify(body, {
+    lineWidth: 0,
+    defaultStringType: "PLAIN",
+    defaultKeyType: "PLAIN"
+  }).trimEnd();
+  if (bodyYaml) {
+    return `---
+${front}
+---
+
+${bodyYaml}
+`;
+  }
   return `---
-${yamlContent}---
+${front}
+---
 `;
 }
-function resolveArtifactPath(filename, baseDir = process.cwd()) {
-  return join2(baseDir, ARTIFACT_DIR, filename);
+function getSessionDir(artifact, baseDir) {
+  return join2(baseDir, ARTIFACT_DIR, artifact.session);
 }
-async function ensureArtifactDir(baseDir = process.cwd()) {
-  const dirPath = join2(baseDir, ARTIFACT_DIR);
+function resolveArtifactPath(artifact, baseDir = process.cwd()) {
+  const filename = generateFilename(artifact);
+  return join2(getSessionDir(artifact, baseDir), filename);
+}
+async function ensureArtifactDir(artifact, baseDir = process.cwd()) {
+  const dirPath = getSessionDir(artifact, baseDir);
   if (!existsSync(dirPath)) {
     await mkdir(dirPath, { recursive: true });
   }
 }
 async function writeArtifact(artifact, options) {
   assertValidArtifact(artifact);
-  const filename = generateFilename(artifact.timestamp, artifact.session_id);
   const content = formatArtifactYaml(artifact);
   const baseDir = options?.baseDir || process.cwd();
-  const filePath = resolveArtifactPath(filename, baseDir);
+  const filePath = resolveArtifactPath(artifact, baseDir);
   if (options?.dryRun) {
     return filePath;
   }
-  await ensureArtifactDir(baseDir);
+  await ensureArtifactDir(artifact, baseDir);
   try {
     await writeFile(filePath, content, "utf-8");
     return filePath;
@@ -184,49 +243,65 @@ async function writeArtifact(artifact, options) {
 
 // src/shared/artifact-schema.ts
 var ARTIFACT_SCHEMA_VERSION = "1.0.0";
-function createArtifact(eventType, goal, now, outcome, options) {
+function createArtifact(mode, goal, now, outcome, options) {
+  if (!options.session) {
+    throw new Error("Artifacts require a session name");
+  }
   const base = {
     schema_version: ARTIFACT_SCHEMA_VERSION,
-    event_type: eventType,
-    timestamp: options?.timestamp || (/* @__PURE__ */ new Date()).toISOString(),
-    session_id: options?.session_id,
-    session_name: options?.session_name,
+    mode,
+    date: options.date || (/* @__PURE__ */ new Date()).toISOString(),
+    session: options.session,
+    outcome,
+    primary_bead: options.primary_bead,
+    session_id: options.session_id,
+    root_span_id: options.root_span_id,
+    turn_span_id: options.turn_span_id,
     goal,
     now,
-    outcome,
-    metadata: options?.metadata
+    metadata: options.metadata
   };
-  if (eventType === "checkpoint") {
-    if (options?.primary_bead) {
-      return {
-        ...base,
-        primary_bead: options.primary_bead
-      };
+  if (mode === "checkpoint") {
+    if (!options.primary_bead) {
+      delete base.primary_bead;
     }
     return base;
   }
-  if (eventType === "handoff") {
-    if (!options?.primary_bead) {
+  if (mode === "handoff") {
+    if (!options.primary_bead) {
       throw new Error("Handoff artifacts require a primary_bead");
     }
-    return {
-      ...base,
-      primary_bead: options.primary_bead
-    };
+    return base;
   }
-  if (eventType === "finalize") {
-    if (!options?.primary_bead) {
+  if (mode === "finalize") {
+    if (!options.primary_bead) {
       throw new Error("Finalize artifacts require a primary_bead");
     }
-    return {
-      ...base,
-      primary_bead: options.primary_bead
-    };
+    return base;
   }
-  throw new Error(`Unknown event type: ${eventType}`);
+  throw new Error(`Unknown mode: ${mode}`);
 }
 
 // src/write-checkpoint-cli.ts
+function slugify2(value) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "session";
+}
+function normalizeSessionName(value) {
+  return value.trim().replace(/\s+/g, "-");
+}
+function buildSessionName(args) {
+  if (args.session) {
+    return normalizeSessionName(args.session);
+  }
+  if (args.primary_bead) {
+    const titleSource = args.session_title || args.goal;
+    return `${args.primary_bead}-${slugify2(titleSource)}`;
+  }
+  if (args.session_title) {
+    return slugify2(args.session_title);
+  }
+  throw new Error("session name is required when no primary_bead is provided");
+}
 function parseArgs() {
   const args = process.argv.slice(2);
   const parsed = {};
@@ -234,8 +309,17 @@ function parseArgs() {
     const arg = args[i];
     const value = args[i + 1];
     if (arg.startsWith("--")) {
-      const key = arg.slice(2);
-      if (key === "next" || key === "blockers" || key === "questions") {
+      let key = arg.slice(2);
+      if (key === "session_name" || key === "session-name") {
+        key = "session";
+      }
+      if (key === "session_title" || key === "session-title") {
+        key = "session_title";
+      }
+      if (key === "done_this_session" || key === "done-this-session") {
+        key = "done_this_session";
+      }
+      if (key === "next" || key === "blockers" || key === "questions" || key === "worked" || key === "failed") {
         if (!parsed[key]) {
           parsed[key] = [];
         }
@@ -259,7 +343,8 @@ function parseArgs() {
     console.error('    --now "Current focus" \\');
     console.error("    --outcome PARTIAL_PLUS \\");
     console.error("    [--primary_bead beads-xxx] \\");
-    console.error("    [--session_id abc123] \\");
+    console.error('    [--session "bead-short-title"] \\');
+    console.error('    [--session-title "short title"] \\');
     console.error('    [--test "pytest tests/"] \\');
     console.error('    [--next "First step"] \\');
     console.error('    [--blockers "Blocker 1"]');
@@ -270,6 +355,7 @@ function parseArgs() {
 async function main() {
   try {
     const args = parseArgs();
+    const session = buildSessionName(args);
     const artifact = createArtifact(
       "checkpoint",
       args.goal,
@@ -277,17 +363,18 @@ async function main() {
       args.outcome,
       {
         primary_bead: args.primary_bead,
-        // Optional for checkpoint
-        session_id: args.session_id,
-        session_name: args.session_name
+        session,
+        session_id: args.session_id
       }
     );
     if (args.test) artifact.test = args.test;
     if (args.next) artifact.next = args.next;
     if (args.blockers) artifact.blockers = args.blockers;
     if (args.questions) artifact.questions = args.questions;
-    if (args.this_session) {
-      artifact.this_session = JSON.parse(args.this_session);
+    if (args.worked) artifact.worked = args.worked;
+    if (args.failed) artifact.failed = args.failed;
+    if (args.done_this_session) {
+      artifact.done_this_session = JSON.parse(args.done_this_session);
     }
     if (args.decisions) {
       artifact.decisions = JSON.parse(args.decisions);
@@ -296,7 +383,9 @@ async function main() {
       artifact.findings = JSON.parse(args.findings);
     }
     if (args.learnings) {
-      artifact.learnings = JSON.parse(args.learnings);
+      const learnings = JSON.parse(args.learnings);
+      if (learnings.worked) artifact.worked = learnings.worked;
+      if (learnings.failed) artifact.failed = learnings.failed;
     }
     if (args.git) {
       artifact.git = JSON.parse(args.git);
@@ -309,9 +398,9 @@ async function main() {
       success: true,
       path: filePath,
       artifact: {
-        event_type: artifact.event_type,
-        timestamp: artifact.timestamp,
-        session_id: artifact.session_id,
+        mode: artifact.mode,
+        date: artifact.date,
+        session: artifact.session,
         primary_bead: artifact.primary_bead
       }
     }, null, 2));

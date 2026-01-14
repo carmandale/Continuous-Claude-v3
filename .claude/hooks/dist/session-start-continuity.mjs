@@ -2,6 +2,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
+import YAML from "yaml";
 function buildHandoffDirName(sessionName, sessionId) {
   const uuidShort = sessionId.replace(/-/g, "").slice(0, 8);
   return `${sessionName}-${uuidShort}`;
@@ -20,11 +21,11 @@ function findSessionHandoffWithUUID(sessionName, sessionId) {
   const uuidShort = sessionId.replace(/-/g, "").slice(0, 8).toLowerCase();
   const exactDir = path.join(handoffsBase, `${sessionName}-${uuidShort}`);
   if (fs.existsSync(exactDir)) {
-    return findMostRecentMdFile(exactDir);
+    return findMostRecentArtifactFile(exactDir);
   }
   const legacyDir = path.join(handoffsBase, sessionName);
   if (fs.existsSync(legacyDir) && fs.statSync(legacyDir).isDirectory()) {
-    const result = findMostRecentMdFile(legacyDir);
+    const result = findMostRecentArtifactFile(legacyDir);
     if (result) return result;
   }
   const allDirs = fs.readdirSync(handoffsBase).filter((d) => {
@@ -39,35 +40,46 @@ function findSessionHandoffWithUUID(sessionName, sessionId) {
     return statB.mtime.getTime() - statA.mtime.getTime();
   });
   for (const dir of allDirs) {
-    const result = findMostRecentMdFile(path.join(handoffsBase, dir));
+    const result = findMostRecentArtifactFile(path.join(handoffsBase, dir));
     if (result) return result;
   }
   return null;
 }
-function findMostRecentMdFile(dirPath) {
+var ARTIFACT_EXTENSIONS = /* @__PURE__ */ new Set([".yaml", ".yml", ".md"]);
+function isArtifactFile(filename) {
+  return ARTIFACT_EXTENSIONS.has(path.extname(filename).toLowerCase());
+}
+function findMostRecentArtifactFile(dirPath) {
   if (!fs.existsSync(dirPath)) return null;
-  const mdFiles = fs.readdirSync(dirPath).filter((f) => f.endsWith(".md")).sort((a, b) => {
+  const files = fs.readdirSync(dirPath).filter(isArtifactFile).sort((a, b) => {
     const statA = fs.statSync(path.join(dirPath, a));
     const statB = fs.statSync(path.join(dirPath, b));
     return statB.mtime.getTime() - statA.mtime.getTime();
   });
-  return mdFiles.length > 0 ? path.join(dirPath, mdFiles[0]) : null;
+  return files.length > 0 ? path.join(dirPath, files[0]) : null;
 }
 function extractLedgerSection(handoffContent) {
   const match = handoffContent.match(/(?:^|\n)## Ledger\n([\s\S]*?)(?=\n---\n|\n## [^#]|$)/);
   return match ? `## Ledger
 ${match[1].trim()}` : null;
 }
+function parseYamlArtifact(content) {
+  const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (!frontmatterMatch) return null;
+  try {
+    const frontmatter = YAML.parse(frontmatterMatch[1]) || {};
+    const bodyText = frontmatterMatch[2]?.trim() || "";
+    const body = bodyText ? YAML.parse(bodyText) : {};
+    return { frontmatter, body };
+  } catch {
+    return null;
+  }
+}
 function findSessionHandoff(sessionName) {
   const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
   const handoffDir = path.join(projectDir, "thoughts", "shared", "handoffs", sessionName);
   if (!fs.existsSync(handoffDir)) return null;
-  const handoffFiles = fs.readdirSync(handoffDir).filter((f) => f.endsWith(".md")).sort((a, b) => {
-    const statA = fs.statSync(path.join(handoffDir, a));
-    const statB = fs.statSync(path.join(handoffDir, b));
-    return statB.mtime.getTime() - statA.mtime.getTime();
-  });
-  return handoffFiles.length > 0 ? path.join(handoffDir, handoffFiles[0]) : null;
+  return findMostRecentArtifactFile(handoffDir);
 }
 function pruneLedger(ledgerPath) {
   let content = fs.readFileSync(ledgerPath, "utf-8");
@@ -161,18 +173,38 @@ async function main() {
         const stat = fs.statSync(path.join(handoffsDir, d));
         return stat.isDirectory();
       });
-      let mostRecentLedger = null;
+      let mostRecentArtifact = null;
       for (const sessionName of sessionDirs) {
         const handoffPath = findSessionHandoff(sessionName);
         if (handoffPath) {
           const content = fs.readFileSync(handoffPath, "utf-8");
+          const ext = path.extname(handoffPath).toLowerCase();
+          const mtime = fs.statSync(handoffPath).mtime.getTime();
+          if (ext === ".yaml" || ext === ".yml") {
+            const parsed = parseYamlArtifact(content);
+            if (parsed) {
+              const goal = typeof parsed.body.goal === "string" ? parsed.body.goal : "";
+              const now = typeof parsed.body.now === "string" ? parsed.body.now : "";
+              const sessionLabel = typeof parsed.frontmatter.session === "string" ? parsed.frontmatter.session : sessionName;
+              if (!mostRecentArtifact || mtime > mostRecentArtifact.mtime) {
+                mostRecentArtifact = {
+                  content,
+                  sessionName: sessionLabel,
+                  handoffPath,
+                  mtime,
+                  goalSummary: goal ? goal.substring(0, 100) : "No goal found",
+                  currentFocus: now || "Unknown"
+                };
+              }
+            }
+            continue;
+          }
           const ledgerSection = extractLedgerSection(content);
           if (ledgerSection) {
-            const mtime = fs.statSync(handoffPath).mtime.getTime();
-            if (!mostRecentLedger || mtime > mostRecentLedger.mtime) {
+            if (!mostRecentArtifact || mtime > mostRecentArtifact.mtime) {
               const goalMatch = ledgerSection.match(/\*\*Goal:\*\*\s*([^\n]+)/);
               const nowMatch = ledgerSection.match(/### Now\n\[?-?>?\]?\s*([^\n]+)/);
-              mostRecentLedger = {
+              mostRecentArtifact = {
                 content: ledgerSection,
                 sessionName,
                 handoffPath,
@@ -184,19 +216,19 @@ async function main() {
           }
         }
       }
-      if (mostRecentLedger) {
+      if (mostRecentArtifact) {
         usedHandoffLedger = true;
-        const { sessionName, goalSummary, currentFocus, content: ledgerSection, handoffPath } = mostRecentLedger;
+        const { sessionName, goalSummary, currentFocus, content: artifactContent, handoffPath } = mostRecentArtifact;
         const handoffFilename = path.basename(handoffPath);
         if (sessionType === "startup") {
-          message = `\u{1F4CB} Handoff Ledger: ${sessionName} \u2192 ${currentFocus} (run /resume_handoff to continue)`;
+          message = `\u{1F4CB} Handoff artifact: ${sessionName} \u2192 ${currentFocus} (run /resume_handoff to continue)`;
         } else {
-          console.error(`\u2713 Handoff Ledger loaded: ${sessionName} \u2192 ${currentFocus}`);
+          console.error(`\u2713 Handoff artifact loaded: ${sessionName} \u2192 ${currentFocus}`);
           message = `[${sessionType}] Loaded from handoff: ${handoffFilename} | Goal: ${goalSummary} | Focus: ${currentFocus}`;
           if (sessionType === "clear" || sessionType === "compact") {
-            additionalContext = `Handoff Ledger loaded from ${handoffFilename}:
+            additionalContext = `Handoff artifact loaded from ${handoffFilename}:
 
-${ledgerSection}`;
+${artifactContent}`;
             const unmarkedHandoffs = getUnmarkedHandoffs();
             if (unmarkedHandoffs.length > 0) {
               additionalContext += `

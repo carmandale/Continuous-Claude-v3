@@ -37,7 +37,7 @@ This creates:
 4. **Backward compatibility** - existing artifacts remain accessible during migration
 
 ### Non-Goals
-- **Changing core concepts** - checkpoint/handoff/finalize remain distinct event types
+- **Changing core concepts** - checkpoint/handoff/finalize remain distinct modes
 - **Breaking existing workflows** - `/checkpoint`, `/handoff`, `/finalize` skills still work
 - **New features** - focus is consolidation, not new capabilities
 
@@ -70,25 +70,32 @@ This creates:
 **Priority:** P0 (Critical)
 
 The system MUST support a unified artifact schema with:
-- `event_type`: One of `checkpoint`, `handoff`, `finalize`
-- `timestamp`: ISO 8601 timestamp of artifact creation
-- `session_id`: Session identifier
-- `bead_id`: Optional bead tracking ID
-- `content`: Markdown content body
+- `mode`: One of `checkpoint`, `handoff`, `finalize`
+- `date`: ISO 8601 date or date-time
+- `session`: Session folder name (bead + short slug)
+- `primary_bead`: Required for handoff/finalize, optional for checkpoint
+- YAML frontmatter + YAML body (no Markdown body)
 - `metadata`: Extensible object for custom fields
 
 **Example:**
 ```yaml
-event_type: handoff
-timestamp: 2026-01-13T15:30:00Z
-session_id: abc123
-bead_id: beads-456
-content: |
-  ## Summary
-  Completed auth refactor
+---
+mode: handoff
+date: 2026-01-13T15:30:00Z
+session: Continuous-Claude-v3-456-auth-refactor
+primary_bead: Continuous-Claude-v3-456
+outcome: PARTIAL_PLUS
+---
+
+goal: Complete auth refactor
+now: Implemented Redis sessions; needs tests
+done_this_session:
+  - task: Added Redis session store
+    files: [src/auth/session.ts]
+next:
+  - Add unit tests for session store
 metadata:
   git_branch: feat/auth
-  files_changed: 5
 ```
 
 #### FR2: Storage Location
@@ -96,21 +103,21 @@ metadata:
 
 All artifacts MUST be stored in:
 ```
-thoughts/shared/handoffs/events/<filename>
+thoughts/shared/handoffs/<session>/<filename>
 ```
 
 Where `<filename>` follows pattern:
 ```
-YYYY-MM-DDTHH-MM-SS.sssZ_<hash>.md
+YYYY-MM-DD_HH-MM_<short-title>_<mode>.yaml
 ```
 
 #### FR3: Event Type Routing
 **Priority:** P0 (Critical)
 
-Skills MUST specify event type:
-- `/checkpoint` → `event_type: checkpoint`
-- `/handoff` → `event_type: handoff`
-- `/finalize` → `event_type: finalize`
+Skills MUST specify mode:
+- `/checkpoint` → `mode: checkpoint`
+- `/handoff` → `mode: handoff`
+- `/finalize` → `mode: finalize`
 
 #### FR4: Writer Function Consolidation
 **Priority:** P1 (High)
@@ -118,11 +125,14 @@ Skills MUST specify event type:
 Replace separate implementations with single writer:
 ```typescript
 writeArtifact({
-  eventType: 'checkpoint' | 'handoff' | 'finalize',
-  content: string,
-  sessionId: string,
-  beadId?: string,
-  metadata?: Record<string, any>
+  mode: 'checkpoint' | 'handoff' | 'finalize',
+  date: string,
+  session: string,
+  primary_bead?: string,
+  outcome: 'SUCCEEDED' | 'PARTIAL_PLUS' | 'PARTIAL_MINUS' | 'FAILED',
+  goal: string,
+  now: string,
+  metadata?: Record<string, unknown>
 })
 ```
 
@@ -130,15 +140,15 @@ writeArtifact({
 **Priority:** P2 (Medium)
 
 Provide migration script to convert:
-- `.checkpoint/*.md` → `thoughts/shared/handoffs/events/*.md` (type=checkpoint)
-- `.handoff/*.md` → `thoughts/shared/handoffs/events/*.md` (type=handoff)
+- `.checkpoint/*.md` → `thoughts/shared/handoffs/<session>/*.yaml` (mode=checkpoint)
+- `.handoff/*.md` → `thoughts/shared/handoffs/<session>/*.yaml` (mode=handoff)
 
 #### FR6: Hook Integration
 **Priority:** P1 (High)
 
 Update `handoff-index` hook to:
-- Index unified artifacts from `thoughts/shared/handoffs/events/`
-- Support filtering by `event_type`
+- Index unified artifacts from `thoughts/shared/handoffs/<session>/`
+- Support filtering by `mode`
 - Maintain existing functionality
 
 ---
@@ -172,7 +182,7 @@ Update `handoff-index` hook to:
 
 **Acceptance Criteria:**
 - ✓ Schema documented and validated
-- ✓ Writer function creates valid artifacts in `thoughts/shared/handoffs/events/`
+- ✓ Writer function creates valid artifacts in `thoughts/shared/handoffs/<session>/`
 - ✓ Tests pass
 
 ### Phase 2: Skill Refactor (Week 2)
@@ -257,13 +267,20 @@ Update `handoff-index` hook to:
 ### TypeScript Interface
 ```typescript
 interface UnifiedArtifact {
-  schema_version: "1.0"
-  event_type: "checkpoint" | "handoff" | "finalize"
-  timestamp: string // ISO 8601
-  session_id: string
-  bead_id?: string
-  content: string // Markdown
-  metadata?: Record<string, any>
+  schema_version: "1.0.0"
+  mode: "checkpoint" | "handoff" | "finalize"
+  date: string // ISO 8601 date or date-time
+  session: string
+  primary_bead?: string
+  outcome: "SUCCEEDED" | "PARTIAL_PLUS" | "PARTIAL_MINUS" | "FAILED"
+  goal: string
+  now: string
+  done_this_session?: Array<{ task: string; files: string[] }>
+  next?: string[]
+  decisions?: Record<string, string>
+  worked?: string[]
+  failed?: string[]
+  metadata?: Record<string, unknown>
 }
 ```
 
@@ -272,14 +289,21 @@ interface UnifiedArtifact {
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["schema_version", "event_type", "timestamp", "session_id", "content"],
+  "required": ["schema_version", "mode", "date", "session", "goal", "now", "outcome"],
   "properties": {
-    "schema_version": { "type": "string", "const": "1.0" },
-    "event_type": { "type": "string", "enum": ["checkpoint", "handoff", "finalize"] },
-    "timestamp": { "type": "string", "format": "date-time" },
-    "session_id": { "type": "string" },
-    "bead_id": { "type": "string" },
-    "content": { "type": "string" },
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "mode": { "type": "string", "enum": ["checkpoint", "handoff", "finalize"] },
+    "date": { "type": "string" },
+    "session": { "type": "string" },
+    "primary_bead": { "type": "string" },
+    "outcome": { "type": "string", "enum": ["SUCCEEDED", "PARTIAL_PLUS", "PARTIAL_MINUS", "FAILED"] },
+    "goal": { "type": "string" },
+    "now": { "type": "string" },
+    "done_this_session": { "type": "array" },
+    "next": { "type": "array" },
+    "decisions": { "type": "object" },
+    "worked": { "type": "array" },
+    "failed": { "type": "array" },
     "metadata": { "type": "object" }
   }
 }

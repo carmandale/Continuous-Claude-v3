@@ -12,11 +12,11 @@ When multiple Claude Code instances work on the same project, they share workflo
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                    WORKFLOW: open-source-release                            │
 │                                                                             │
-│  Handoffs Directory: thoughts/shared/handoffs/events/                       │
+│  Handoffs Directory: thoughts/shared/handoffs/open-source-release/          │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │ 2026-01-09T14-00-00.000Z_a1b2c3d4.md  ← Instance A created          │   │
-│  │ 2026-01-09T15-00-00.000Z_e5f6a7b8.md  ← Instance B created          │   │
-│  │ 2026-01-09T16-00-00.000Z_c9d0e1f2.md  ← Instance C created ★ LATEST │   │
+│  │ 2026-01-09_14-00_open-source-release_handoff.yaml ← Instance A     │   │
+│  │ 2026-01-09_15-00_open-source-release_handoff.yaml ← Instance B     │   │
+│  │ 2026-01-09_16-00_open-source-release_handoff.yaml ← Instance C ★   │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
 
@@ -44,8 +44,8 @@ When multiple Claude Code instances work on the same project, they share workflo
 A handoff is created when work is **complete** and being handed off:
 - "I'm DONE with X, here's what the workflow needs next"
 - Contains: goal, now, done_this_session, blockers, next steps
-- Stored in: `thoughts/shared/handoffs/events/YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md`
-- Use `session_name` in frontmatter to group by workflow if needed
+- Stored in: `thoughts/shared/handoffs/<session>/YYYY-MM-DD_HH-MM_<title>_handoff.yaml`
+- Use `session` in frontmatter to group by workflow
 
 ### Status Line = Shared Workflow State
 
@@ -88,12 +88,11 @@ Each instance's status line updates when ANY instance creates a new handoff. Thi
 ### Handoff Creation (`/create_handoff`)
 
 ```yaml
-# thoughts/shared/handoffs/events/YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
+# thoughts/shared/handoffs/<session>/YYYY-MM-DD_HH-MM_<title>_handoff.yaml
 ---
-event_type: handoff
-timestamp: 2026-01-09T14:00:00.000Z
-session_id: a1b2c3d4
-session_name: open-source-release
+mode: handoff
+date: 2026-01-09T14:00:00.000Z
+session: open-source-release
 ---
 
 goal: What this session accomplished
@@ -103,7 +102,7 @@ now: What next session should do first
 ### Status Line (`status.py`)
 
 ```python
-# Finds latest artifact by filename timestamp in events/
+# Finds latest artifact by filename timestamp across thoughts/shared/handoffs/*/*.yaml
 # Extracts goal: and now: fields from YAML frontmatter/body
 # Displays in status line for ALL instances
 ```

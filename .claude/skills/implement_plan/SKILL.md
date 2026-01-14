@@ -173,13 +173,13 @@ Handoffs persist on disk. If compaction happens, you re-read handoffs and contin
 
 1. **Create handoff directory:**
    ```bash
-   mkdir -p thoughts/shared/handoffs/events
+   mkdir -p thoughts/shared/handoffs/<session>
    ```
    Use the session name from your continuity ledger.
 
 2. **Read the implementation agent skill:**
    ```bash
-   cat .claude/skills/implement_task/SKILL.md
+   cat .claude/skills/implement_task/SKILL.yaml
    ```
    This defines how agents should behave.
 
@@ -189,7 +189,7 @@ Before implementing, ensure the plan has been validated using the `validate-agen
 
 **Check for validation handoff:**
 ```bash
-ls thoughts/shared/handoffs/events/validation-*.md
+ls thoughts/shared/handoffs/<session>/validation-*.yaml
 ```
 
 If no validation exists, suggest running validation first:
@@ -206,7 +206,7 @@ For each task in the plan:
 1. **Prepare agent context:**
    - Read continuity ledger (current state)
    - Read the plan (overall context)
-   - Read previous handoff if exists (from thoughts/shared/handoffs/events/)
+   - Read previous handoff if exists (from thoughts/shared/handoffs/<session>/)
    - Identify the specific task
 
 2. **Spawn implementation agent:**
@@ -215,7 +215,7 @@ For each task in the plan:
      subagent_type="general-purpose",
      model="claude-opus-4-5-20251101",
      prompt="""
-     [Paste contents of .claude/skills/implement_task/SKILL.md here]
+     [Paste contents of .claude/skills/implement_task/SKILL.yaml here]
 
      ---
 
@@ -234,10 +234,10 @@ For each task in the plan:
      [Paste previous task's handoff content, or "This is the first task - no previous handoff"]
 
      ### Handoff Directory:
-     thoughts/shared/handoffs/events/
+     thoughts/shared/handoffs/<session>/
 
      ### Handoff Filename:
-     task-[NN]-[short-description].md
+     task-[NN]-[short-description].yaml
 
      ---
 
@@ -264,7 +264,7 @@ If auto-compact happens mid-orchestration:
 1. Read continuity ledger (loaded by SessionStart hook)
 2. List handoff directory:
    ```bash
-   ls -la thoughts/shared/handoffs/events/
+   ls -la thoughts/shared/handoffs/<session>/
    ```
 3. Read the last handoff to understand where you were
 4. Continue spawning agents from next uncompleted task
@@ -272,30 +272,30 @@ If auto-compact happens mid-orchestration:
 ### Example Orchestration Session
 
 ```
-User: /implement_plan thoughts/shared/plans/PLAN-add-auth.md
+User: /implement_plan thoughts/shared/plans/PLAN-add-auth.yaml
 
 Claude: I'll use agent orchestration for this plan (6 tasks).
 
 Setting up handoff directory...
-[Creates thoughts/shared/handoffs/events/]
+[Creates thoughts/shared/handoffs/<session>/]
 
 Task 1 of 6: Create user model
 [Spawns agent with full context]
-[Agent completes, creates task-01-user-model.md]
+[Agent completes, creates task-01-user-model.yaml]
 
-✅ Task 1 complete. Handoff: thoughts/shared/handoffs/events/task-01-user-model.md
+✅ Task 1 complete. Handoff: thoughts/shared/handoffs/<session>/task-01-user-model.yaml
 
 Task 2 of 6: Add authentication middleware
 [Spawns agent with previous handoff]
-[Agent completes, creates task-02-auth-middleware.md]
+[Agent completes, creates task-02-auth-middleware.yaml]
 
-✅ Task 2 complete. Handoff: thoughts/shared/handoffs/events/task-02-auth-middleware.md
+✅ Task 2 complete. Handoff: thoughts/shared/handoffs/<session>/task-02-auth-middleware.yaml
 
 --- AUTO COMPACT HAPPENS ---
 [Context compressed, but handoffs persist]
 
 Claude: [Reads ledger, sees tasks 1-2 done]
-[Reads last handoff task-02-auth-middleware.md]
+[Reads last handoff task-02-auth-middleware.yaml]
 
 Resuming from Task 3 of 6: Create login endpoint
 [Spawns agent]
@@ -307,11 +307,11 @@ Resuming from Task 3 of 6: Create login endpoint
 Each agent reads previous handoff → does work → creates next handoff:
 
 ```
-task-01-user-model.md
+task-01-user-model.yaml
     ↓ (read by agent 2)
-task-02-auth-middleware.md
+task-02-auth-middleware.yaml
     ↓ (read by agent 3)
-task-03-login-endpoint.md
+task-03-login-endpoint.yaml
     ↓ (read by agent 4)
 ...
 ```

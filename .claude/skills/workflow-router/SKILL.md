@@ -127,7 +127,7 @@ Task(
   Research: [topic]
 
   Scope: [what to investigate]
-  Output: Create a handoff with findings at thoughts/shared/handoffs/events/
+  Output: Create a handoff with findings at thoughts/shared/handoffs/<session>/
   """
 )
 ```

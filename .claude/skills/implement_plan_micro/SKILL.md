@@ -140,7 +140,7 @@ INIT --> READ_PLAN --> MODE_SELECT --+--> DIRECT: [IMPL -> AUTO -> MANUAL -> WAI
 ## Output Schema
 
 ```yaml
-handoff_path: "thoughts/shared/handoffs/events/task-[NN]-[desc].md"
+handoff_path: "thoughts/shared/handoffs/<session>/task-[NN]-[desc].yaml"
 schema:
   required: [status, task_desc, files_modified[], verification_results, context_for_next]
   optional: [blocker, decisions[], open_questions[]]
@@ -190,13 +190,13 @@ Task(subagent_type="general-purpose", model="claude-opus-4-5-20251101", prompt="
 - Plan: [section]
 - Task: [N]/[Total]: [desc]
 - Previous Handoff: [content or "first task"]
-- Handoff Dir: thoughts/shared/handoffs/events/
+- Handoff Dir: thoughts/shared/handoffs/<session>/
 """)
 ```
 
 **Recovery (post-compaction):**
 1. Ledger auto-loaded by SessionStart
-2. `ls thoughts/shared/handoffs/events/`
+2. `ls thoughts/shared/handoffs/<session>/`
 3. Read last handoff
 4. Resume next task
 

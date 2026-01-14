@@ -9,7 +9,9 @@ import { validateArtifactSchema, assertValidArtifact } from './artifact-validato
 import { createArtifact } from './artifact-schema.js';
 
 // Create artifact
-const artifact = createArtifact('checkpoint', 'Implement auth', 'Writing tests', 'PARTIAL_PLUS');
+const artifact = createArtifact('checkpoint', 'Implement auth', 'Writing tests', 'PARTIAL_PLUS', {
+  session: 'auth-refactor',
+});
 
 // Validate and get detailed errors
 const result = validateArtifactSchema(artifact);
@@ -68,8 +70,9 @@ Validate and throw on failure. Use for write-time validation.
 ### Required Fields (All Modes)
 
 - `schema_version`: Semver format (e.g., "1.0.0")
-- `event_type`: "checkpoint" | "handoff" | "finalize"
-- `timestamp`: ISO 8601 date-time
+- `mode`: "checkpoint" | "handoff" | "finalize"
+- `date`: ISO 8601 date or date-time
+- `session`: Session folder name (bead + slug)
 - `goal`: Non-empty string
 - `now`: Non-empty string
 - `outcome`: "SUCCEEDED" | "PARTIAL_PLUS" | "PARTIAL_MINUS" | "FAILED"
@@ -86,11 +89,11 @@ Validate and throw on failure. Use for write-time validation.
 
 When present, these fields are validated:
 
-- `session_id`, `session_name`: Non-empty strings
-- `this_session[]`: Array of `{task: string, files: string[]}`
+- `session_id`: Non-empty string
+- `done_this_session[]`: Array of `{task: string, files: string[]}`
 - `next[]`, `blockers[]`, `questions[]`: String arrays
 - `decisions`: Object or Decision array
-- `learnings`: `{worked?: string[], failed?: string[]}`
+- `worked[]`, `failed[]`: String arrays
 - `findings`: Key-value object
 - `git`: `{branch: string, commit: string, remote?: string, pr_ready?: uri}`
 - `files`: `{created?: string[], modified?: string[], deleted?: string[]}`
@@ -114,11 +117,11 @@ Clear, actionable error messages with field paths:
 
 ```
 Artifact validation failed:
-  • /event_type: Invalid value: must be one of checkpoint, handoff, finalize
+  • /mode: Invalid value: must be one of checkpoint, handoff, finalize
     Got: "invalid"
   • /outcome: Missing required field: outcome
   • /primary_bead: Missing required field: primary_bead
-  • /timestamp: Invalid format: expected date-time
+  • /date: Invalid format: expected date-time
     Got: "not-a-date"
 ```
 

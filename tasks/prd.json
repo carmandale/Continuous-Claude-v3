@@ -8,9 +8,9 @@
       "title": "Define unified artifact schema",
       "description": "As a system architect, I need a unified schema that supports checkpoint, handoff, and finalize event types with consistent structure and extensibility.",
       "acceptanceCriteria": [
-        "TypeScript interface UnifiedArtifact defined with schema_version, event_type, timestamp, session_id, bead_id, content, metadata fields",
-        "JSON Schema defined with proper validation rules (required fields, enums for event_type, ISO 8601 format for timestamp)",
-        "Schema documentation includes examples for all three event types",
+        "TypeScript interface UnifiedArtifact defined with schema_version, mode, date, session, goal, now, outcome, and conditional primary_bead",
+        "JSON Schema defined with proper validation rules (required fields, enums for mode, ISO 8601 format for date)",
+        "Schema documentation includes examples for all three modes",
         "Schema includes metadata field for extensibility",
         "All tests pass"
       ],
@@ -24,9 +24,9 @@
       "title": "Implement writeArtifact() writer function",
       "description": "As a skill developer, I need a single unified writer function that can create artifacts for any event type (checkpoint/handoff/finalize).",
       "acceptanceCriteria": [
-        "writeArtifact() function accepts eventType, content, sessionId, beadId (optional), metadata (optional)",
-        "Function generates filename following pattern: YYYY-MM-DDTHH-MM-SS.sssZ_<hash>.md",
-        "Function writes to thoughts/shared/handoffs/events/ directory",
+        "writeArtifact() function accepts mode, goal, now, outcome, session, and optional primary_bead/metadata",
+        "Function generates filename following pattern: YYYY-MM-DD_HH-MM_<title>_<mode>.yaml",
+        "Function writes to thoughts/shared/handoffs/<session>/ directory",
         "Function includes YAML frontmatter with all schema fields",
         "Function creates directory structure if missing",
         "All tests pass"
@@ -41,9 +41,9 @@
       "title": "Add schema validation to writeArtifact()",
       "description": "As a system maintainer, I need validation to catch invalid artifacts before write to prevent corrupt data.",
       "acceptanceCriteria": [
-        "Validation checks all required fields are present (schema_version, event_type, timestamp, session_id, content)",
-        "Validation checks event_type is one of: checkpoint, handoff, finalize",
-        "Validation checks timestamp is valid ISO 8601 format",
+        "Validation checks all required fields are present (schema_version, mode, date, session, goal, now, outcome)",
+        "Validation checks mode is one of: checkpoint, handoff, finalize",
+        "Validation checks date is valid ISO 8601 format",
         "Validation throws clear error messages for invalid data",
         "File write only occurs after validation passes",
         "All tests pass including validation failure cases"
@@ -58,12 +58,12 @@
       "title": "Add unit tests for writer and validation",
       "description": "As a developer, I need comprehensive tests for the artifact writer to ensure reliability.",
       "acceptanceCriteria": [
-        "Test writeArtifact() creates valid artifacts for checkpoint event type",
-        "Test writeArtifact() creates valid artifacts for handoff event type",
-        "Test writeArtifact() creates valid artifacts for finalize event type",
+        "Test writeArtifact() creates valid artifacts for checkpoint mode",
+        "Test writeArtifact() creates valid artifacts for handoff mode",
+        "Test writeArtifact() creates valid artifacts for finalize mode",
         "Test validation rejects missing required fields",
-        "Test validation rejects invalid event_type values",
-        "Test validation rejects invalid timestamp formats",
+        "Test validation rejects invalid mode values",
+        "Test validation rejects invalid date formats",
         "Test file write failure handling (partial writes prevented)",
         "All tests pass with >80% coverage"
       ],
@@ -77,10 +77,10 @@
       "title": "Refactor /checkpoint skill to use unified system",
       "description": "As a user, I want /checkpoint to write to the unified artifact location while maintaining the same interface.",
       "acceptanceCriteria": [
-        "Skill calls writeArtifact() with event_type: 'checkpoint'",
-        "Skill writes to thoughts/shared/handoffs/events/ instead of .checkpoint/",
+        "Skill calls writeArtifact() with mode: 'checkpoint'",
+        "Skill writes to thoughts/shared/handoffs/<session>/ instead of .checkpoint/",
         "Existing skill interface unchanged (backward compatible)",
-        "Skill includes session_id and bead_id if available",
+        "Skill includes session and primary_bead when provided",
         "Skill populates metadata with relevant context",
         "All tests pass"
       ],
@@ -94,10 +94,10 @@
       "title": "Refactor /handoff skill to use unified system",
       "description": "As a user, I want /handoff to write to the unified artifact location while maintaining the same interface.",
       "acceptanceCriteria": [
-        "Skill calls writeArtifact() with event_type: 'handoff'",
-        "Skill writes to thoughts/shared/handoffs/events/ instead of .handoff/",
+        "Skill calls writeArtifact() with mode: 'handoff'",
+        "Skill writes to thoughts/shared/handoffs/<session>/ instead of .handoff/",
         "Existing skill interface unchanged (backward compatible)",
-        "Skill includes session_id and bead_id if available",
+        "Skill includes session and primary_bead",
         "Skill populates metadata with git branch, files changed, etc.",
         "All tests pass"
       ],
@@ -111,10 +111,10 @@
       "title": "Refactor /finalize skill to use unified system",
       "description": "As a user, I want /finalize to write to the unified artifact location while maintaining the same interface.",
       "acceptanceCriteria": [
-        "Skill calls writeArtifact() with event_type: 'finalize'",
-        "Skill writes to thoughts/shared/handoffs/events/",
+        "Skill calls writeArtifact() with mode: 'finalize'",
+        "Skill writes to thoughts/shared/handoffs/<session>/",
         "Existing skill interface unchanged (backward compatible)",
-        "Skill includes session_id and bead_id if available",
+        "Skill includes session and primary_bead",
         "Skill populates metadata with session summary info",
         "All tests pass"
       ],
@@ -132,7 +132,7 @@
         "Test /handoff creates valid artifact in correct location",
         "Test /finalize creates valid artifact in correct location",
         "Test all artifacts follow unified schema",
-        "Test artifacts include correct event_type for each skill",
+        "Test artifacts include correct mode for each skill",
         "Test metadata fields populated correctly",
         "All integration tests pass"
       ],
@@ -147,10 +147,10 @@
       "description": "As a user, I need a migration script to convert my existing .checkpoint/ and .handoff/ artifacts to the unified format.",
       "acceptanceCriteria": [
         "Script discovers all files in .checkpoint/ and .handoff/ directories",
-        "Script converts each file to unified schema with appropriate event_type",
-        "Script generates proper filenames following YYYY-MM-DDTHH-MM-SS.sssZ_<hash>.md pattern",
+        "Script converts each file to unified schema with appropriate mode",
+        "Script generates proper filenames following YYYY-MM-DD_HH-MM_<title>_<mode>.yaml pattern",
         "Script preserves original content in unified format",
-        "Script writes converted artifacts to thoughts/shared/handoffs/events/",
+        "Script writes converted artifacts to thoughts/shared/handoffs/<session>/",
         "Script reports success/failure for each file",
         "Script has dry-run mode for preview",
         "All tests pass"
@@ -163,11 +163,11 @@
     {
       "id": "US-010",
       "title": "Update handoff-index hook for unified artifacts",
-      "description": "As a user, I need the handoff-index hook to index artifacts from the unified location and support filtering by event type.",
+      "description": "As a user, I need the handoff-index hook to index artifacts from the unified location and support filtering by mode.",
       "acceptanceCriteria": [
-        "Hook reads artifacts from thoughts/shared/handoffs/events/",
-        "Hook parses YAML frontmatter to extract event_type and other fields",
-        "Hook supports filtering by event_type (checkpoint, handoff, finalize)",
+        "Hook reads artifacts from thoughts/shared/handoffs/<session>/",
+        "Hook parses YAML frontmatter to extract mode and other fields",
+        "Hook supports filtering by mode (checkpoint, handoff, finalize)",
         "Hook maintains existing functionality (indexing, search)",
         "Hook handles both old and new formats during transition",
         "All tests pass"
@@ -184,9 +184,9 @@
       "acceptanceCriteria": [
         "Documentation explains unified schema structure",
         "Documentation shows examples for checkpoint, handoff, finalize",
-        "Documentation describes storage location (thoughts/shared/handoffs/events/)",
+        "Documentation describes storage location (thoughts/shared/handoffs/<session>/)",
         "Documentation includes migration guide with script usage",
-        "Documentation explains when to use each event type",
+        "Documentation explains when to use each mode",
         "Documentation updated in README and relevant skill files",
         "All tests pass"
       ],

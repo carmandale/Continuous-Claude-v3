@@ -1,14 +1,9 @@
 /**
  * Unified Artifact Schema for Checkpoint, Handoff, and Finalize events.
  *
- * This schema defines the common structure for all session artifacts,
- * supporting three modes with shared and mode-specific fields.
- *
- * Design principles:
- * - Single source of truth for artifact structure
- * - Extensible via metadata object
- * - Type-safe validation at compile time
- * - JSON Schema validation at runtime
+ * Format: YAML frontmatter + YAML body.
+ * - Frontmatter: session metadata (mode, date, session, outcome, bead)
+ * - Body: goal/now and detailed context (all YAML)
  *
  * Related:
  * - Plan: thoughts/shared/plans/2026-01-13-unified-artifact-system.md
@@ -20,9 +15,9 @@
 // =============================================================================
 
 /**
- * Artifact event types - three entry points to the same core function
+ * Artifact modes - three entry points to the same core function
  */
-export type ArtifactEventType = 'checkpoint' | 'handoff' | 'finalize';
+export type ArtifactMode = 'checkpoint' | 'handoff' | 'finalize';
 
 /**
  * Session outcome classification
@@ -69,14 +64,6 @@ export interface Decision {
 }
 
 /**
- * Learnings categorized by success/failure
- */
-export interface Learnings {
-  worked?: string[];
-  failed?: string[];
-}
-
-/**
  * Git metadata
  */
 export interface GitMetadata {
@@ -103,7 +90,6 @@ export interface FilesModified {
  * Handoff-specific fields for session transfer
  */
 export interface HandoffFields {
-  primary_bead: string;
   related_beads?: string[];
   files_to_review?: FileReference[];
   continuation_prompt?: string;
@@ -113,7 +99,6 @@ export interface HandoffFields {
  * Finalize-specific fields for session closure
  */
 export interface FinalizeFields {
-  primary_bead: string;
   related_beads?: string[];
   final_solutions?: {
     problem: string;
@@ -132,31 +117,32 @@ export interface FinalizeFields {
  * Base artifact structure shared by all modes
  */
 export interface BaseArtifact {
-  // Schema metadata
+  // Frontmatter metadata
   schema_version: string;
-  event_type: ArtifactEventType;
-
-  // Session metadata
-  timestamp: string;  // ISO 8601
+  mode: ArtifactMode;
+  date: string;      // ISO 8601 date or date-time
+  session: string;   // Session folder name (bead + slug)
+  outcome: SessionOutcome;
+  primary_bead?: string;
   session_id?: string;
-  session_name?: string;
-  primary_bead?: string;  // Optional for checkpoint, required for handoff/finalize
+  root_span_id?: string;
+  turn_span_id?: string;
 
-  // Core content
+  // Core content (YAML body)
   goal: string;
   now: string;
-  outcome: SessionOutcome;
 
   // Progress tracking
-  this_session?: CompletedTask[];
+  done_this_session?: CompletedTask[];
   next?: string[];
   blockers?: string[];
   questions?: string[];
 
   // Knowledge capture
   decisions?: Record<string, string> | Decision[];
-  learnings?: Learnings;
   findings?: Record<string, string>;
+  worked?: string[];
+  failed?: string[];
 
   // Git context
   git?: GitMetadata;
@@ -175,21 +161,23 @@ export interface BaseArtifact {
  * Checkpoint artifact - lightweight snapshot
  */
 export interface CheckpointArtifact extends BaseArtifact {
-  event_type: 'checkpoint';
+  mode: 'checkpoint';
 }
 
 /**
  * Handoff artifact - transfer package
  */
 export interface HandoffArtifact extends BaseArtifact, HandoffFields {
-  event_type: 'handoff';
+  mode: 'handoff';
+  primary_bead: string;
 }
 
 /**
  * Finalize artifact - session memorial
  */
 export interface FinalizeArtifact extends BaseArtifact, FinalizeFields {
-  event_type: 'finalize';
+  mode: 'finalize';
+  primary_bead: string;
 }
 
 /**
@@ -205,28 +193,28 @@ export type UnifiedArtifact = CheckpointArtifact | HandoffArtifact | FinalizeArt
  * Check if artifact is a checkpoint
  */
 export function isCheckpoint(artifact: UnifiedArtifact): artifact is CheckpointArtifact {
-  return artifact.event_type === 'checkpoint';
+  return artifact.mode === 'checkpoint';
 }
 
 /**
  * Check if artifact is a handoff
  */
 export function isHandoff(artifact: UnifiedArtifact): artifact is HandoffArtifact {
-  return artifact.event_type === 'handoff';
+  return artifact.mode === 'handoff';
 }
 
 /**
  * Check if artifact is a finalize
  */
 export function isFinalize(artifact: UnifiedArtifact): artifact is FinalizeArtifact {
-  return artifact.event_type === 'finalize';
+  return artifact.mode === 'finalize';
 }
 
 /**
- * Check if artifact requires a bead
+ * Check if mode requires a primary_bead
  */
-export function requiresBead(eventType: ArtifactEventType): boolean {
-  return eventType === 'handoff' || eventType === 'finalize';
+export function requiresBead(mode: ArtifactMode): boolean {
+  return mode === 'handoff' || mode === 'finalize';
 }
 
 // =============================================================================
@@ -234,47 +222,50 @@ export function requiresBead(eventType: ArtifactEventType): boolean {
 // =============================================================================
 
 /**
- * Validate artifact structure at runtime (basic TypeScript checks)
- *
- * @deprecated Use validateArtifactSchema() from artifact-validator.ts for full JSON Schema validation
+ * Validate artifact at runtime (lightweight)
  */
-export function validateArtifact(artifact: unknown): artifact is UnifiedArtifact {
-  if (!artifact || typeof artifact !== 'object') {
+export function isValidArtifact(obj: unknown): obj is UnifiedArtifact {
+  if (!obj || typeof obj !== 'object') {
     return false;
   }
 
-  const obj = artifact as Record<string, unknown>;
+  const candidate = obj as Record<string, unknown>;
 
-  // Required fields
-  if (!obj.schema_version || typeof obj.schema_version !== 'string') {
+  if (!candidate.schema_version || typeof candidate.schema_version !== 'string') {
     return false;
   }
 
-  if (!obj.event_type || !['checkpoint', 'handoff', 'finalize'].includes(obj.event_type as string)) {
+  if (!candidate.mode || typeof candidate.mode !== 'string') {
     return false;
   }
 
-  if (!obj.timestamp || typeof obj.timestamp !== 'string') {
+  if (!candidate.date || typeof candidate.date !== 'string') {
     return false;
   }
 
-  if (!obj.goal || typeof obj.goal !== 'string') {
+  if (!candidate.session || typeof candidate.session !== 'string') {
     return false;
   }
 
-  if (!obj.now || typeof obj.now !== 'string') {
+  if (!candidate.goal || typeof candidate.goal !== 'string') {
     return false;
   }
 
-  if (!obj.outcome || !['SUCCEEDED', 'PARTIAL_PLUS', 'PARTIAL_MINUS', 'FAILED'].includes(obj.outcome as string)) {
+  if (!candidate.now || typeof candidate.now !== 'string') {
     return false;
   }
 
-  // Mode-specific validation
-  const eventType = obj.event_type as ArtifactEventType;
+  if (!candidate.outcome || !['SUCCEEDED', 'PARTIAL_PLUS', 'PARTIAL_MINUS', 'FAILED'].includes(candidate.outcome as string)) {
+    return false;
+  }
 
-  if (requiresBead(eventType)) {
-    if (!obj.primary_bead || typeof obj.primary_bead !== 'string') {
+  if (!candidate.mode || !['checkpoint', 'handoff', 'finalize'].includes(candidate.mode as string)) {
+    return false;
+  }
+
+  const mode = candidate.mode as ArtifactMode;
+  if (requiresBead(mode)) {
+    if (!candidate.primary_bead || typeof candidate.primary_bead !== 'string') {
       return false;
     }
   }
@@ -283,63 +274,74 @@ export function validateArtifact(artifact: unknown): artifact is UnifiedArtifact
 }
 
 /**
+ * Backward-compatible alias for validation
+ */
+export function validateArtifact(obj: unknown): obj is UnifiedArtifact {
+  return isValidArtifact(obj);
+}
+
+// =============================================================================
+// Artifact Factory
+// =============================================================================
+
+/**
  * Create a minimal valid artifact
  */
 export function createArtifact(
-  eventType: ArtifactEventType,
+  mode: ArtifactMode,
   goal: string,
   now: string,
   outcome: SessionOutcome,
-  options?: {
-    timestamp?: string;
-    session_id?: string;
-    session_name?: string;
+  options: {
+    session: string;
+    date?: string;
     primary_bead?: string;
+    session_id?: string;
+    root_span_id?: string;
+    turn_span_id?: string;
     metadata?: Record<string, unknown>;
   }
 ): UnifiedArtifact {
+  if (!options.session) {
+    throw new Error('Artifacts require a session name');
+  }
+
   const base: BaseArtifact = {
     schema_version: ARTIFACT_SCHEMA_VERSION,
-    event_type: eventType,
-    timestamp: options?.timestamp || new Date().toISOString(),
-    session_id: options?.session_id,
-    session_name: options?.session_name,
+    mode,
+    date: options.date || new Date().toISOString(),
+    session: options.session,
+    outcome,
+    primary_bead: options.primary_bead,
+    session_id: options.session_id,
+    root_span_id: options.root_span_id,
+    turn_span_id: options.turn_span_id,
     goal,
     now,
-    outcome,
-    metadata: options?.metadata,
+    metadata: options.metadata,
   };
 
-  if (eventType === 'checkpoint') {
+  if (mode === 'checkpoint') {
     // Checkpoint can optionally include primary_bead
-    if (options?.primary_bead) {
-      return {
-        ...base,
-        primary_bead: options.primary_bead,
-      } as CheckpointArtifact & { primary_bead?: string };
+    if (!options.primary_bead) {
+      delete base.primary_bead;
     }
     return base as CheckpointArtifact;
   }
 
-  if (eventType === 'handoff') {
-    if (!options?.primary_bead) {
+  if (mode === 'handoff') {
+    if (!options.primary_bead) {
       throw new Error('Handoff artifacts require a primary_bead');
     }
-    return {
-      ...base,
-      primary_bead: options.primary_bead,
-    } as HandoffArtifact;
+    return base as HandoffArtifact;
   }
 
-  if (eventType === 'finalize') {
-    if (!options?.primary_bead) {
+  if (mode === 'finalize') {
+    if (!options.primary_bead) {
       throw new Error('Finalize artifacts require a primary_bead');
     }
-    return {
-      ...base,
-      primary_bead: options.primary_bead,
-    } as FinalizeArtifact;
+    return base as FinalizeArtifact;
   }
 
-  throw new Error(`Unknown event type: ${eventType}`);
+  throw new Error(`Unknown mode: ${mode}`);
 }
