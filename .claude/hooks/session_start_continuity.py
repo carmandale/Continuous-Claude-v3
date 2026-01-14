@@ -395,12 +395,31 @@ def set_instance_session(terminal_pid: int, session_name: str) -> bool:
 
 
 def parse_filename_timestamp(path: Path) -> str:
-    """Extract YYYY-MM-DD_HH-MM timestamp from filename.
+    """Extract a sortable timestamp from filename.
 
-    Returns '0000-00-00_00-00' if no timestamp found (sorts oldest).
+    Supports unified artifacts (YYYY-MM-DDTHH-MM-SS.sssZ_*) and legacy formats.
+    Returns '0000-00-00_00-00-00' if no timestamp found (sorts oldest).
     """
-    match = re.search(r'(\d{4}-\d{2}-\d{2}_\d{2}-\d{2})', path.name)
-    return match.group(1) if match else '0000-00-00_00-00'
+    name = path.name
+
+    # Unified format: 2026-01-14T00-54-26.972Z_abcdef12.md
+    match = re.search(
+        r'(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})(?:\.(\d{3}))?Z',
+        name
+    )
+    if match:
+        date, hour, minute, second, ms = match.groups()
+        ms_part = f".{ms}" if ms else ""
+        return f"{date}_{hour}-{minute}-{second}{ms_part}"
+
+    # Legacy formats: 2026-01-10_08-15 or 2026-01-10-0815
+    match = re.search(r'(\d{4}-\d{2}-\d{2})[_-](\d{2})-?(\d{2})(?:-?(\d{2}))?', name)
+    if match:
+        date, hour, minute, second = match.groups()
+        second = second or "00"
+        return f"{date}_{hour}-{minute}-{second}"
+
+    return '0000-00-00_00-00-00'
 
 
 def find_most_recent_handoff(dir_path: Path) -> Path | None:

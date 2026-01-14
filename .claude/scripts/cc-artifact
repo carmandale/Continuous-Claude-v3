@@ -1,0 +1,227 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+cc-artifact --mode <checkpoint|handoff|finalize> [options]
+
+Options:
+  --mode <type>           Required: checkpoint | handoff | finalize
+  --bead <id>             Primary bead (required for handoff/finalize)
+  --primary-bead <id>     Alias for --bead
+  --session-name <name>   Optional session name
+  --goal <text>           Optional goal (if omitted, placeholder is inserted)
+  --now <text>            Optional current focus (if omitted, placeholder is inserted)
+  --outcome <value>       Optional outcome (SUCCEEDED|PARTIAL_PLUS|PARTIAL_MINUS|FAILED)
+  --no-edit               Do not open editor after generating the template
+  --edit                  Open editor after generating the template (default)
+  --stdout                Print template to stdout instead of writing a file
+  --output <path>         Override output file path
+  -h, --help              Show this help
+
+Examples:
+  cc-artifact --mode checkpoint
+  cc-artifact --mode handoff --bead Continuous-Claude-v3-123
+  cc-artifact --mode finalize --bead Continuous-Claude-v3-123 --no-edit \
+    --goal "Finalize unified artifacts" --now "All done" --outcome SUCCEEDED
+USAGE
+}
+
+MODE=""
+PRIMARY_BEAD=""
+SESSION_NAME=""
+GOAL=""
+NOW=""
+OUTCOME=""
+EDIT=1
+STDOUT=0
+OUTPUT_PATH=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --mode)
+      MODE="${2:-}"; shift 2 ;;
+    --bead|--primary-bead|--primary_bead)
+      PRIMARY_BEAD="${2:-}"; shift 2 ;;
+    --session-name|--session_name)
+      SESSION_NAME="${2:-}"; shift 2 ;;
+    --goal)
+      GOAL="${2:-}"; shift 2 ;;
+    --now)
+      NOW="${2:-}"; shift 2 ;;
+    --outcome)
+      OUTCOME="${2:-}"; shift 2 ;;
+    --no-edit)
+      EDIT=0; shift ;;
+    --edit)
+      EDIT=1; shift ;;
+    --stdout)
+      STDOUT=1; shift ;;
+    --output)
+      OUTPUT_PATH="${2:-}"; shift 2 ;;
+    -h|--help)
+      usage; exit 0 ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+if [[ -z "$MODE" ]]; then
+  echo "Error: --mode is required" >&2
+  usage
+  exit 1
+fi
+
+case "$MODE" in
+  checkpoint|handoff|finalize) ;;
+  *)
+    echo "Error: --mode must be checkpoint, handoff, or finalize" >&2
+    exit 1
+    ;;
+ esac
+
+if [[ "$MODE" == "handoff" || "$MODE" == "finalize" ]]; then
+  if [[ -z "$PRIMARY_BEAD" ]]; then
+    echo "Error: --bead is required for $MODE" >&2
+    exit 1
+  fi
+fi
+
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+if git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  PROJECT_DIR=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel)
+fi
+
+ARTIFACT_DIR="$PROJECT_DIR/thoughts/shared/handoffs/events"
+
+PYTHON_BIN=$(command -v python3 || command -v python || true)
+if [[ -z "$PYTHON_BIN" ]]; then
+  echo "Error: python3 (or python) is required to generate timestamps" >&2
+  exit 1
+fi
+
+TIMESTAMP=$("$PYTHON_BIN" - <<'PY'
+from datetime import datetime, timezone
+print(datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"))
+PY
+)
+
+SESSION_ID=$("$PYTHON_BIN" - <<'PY'
+import secrets
+print(secrets.token_hex(4))
+PY
+)
+
+SAFE_TIMESTAMP="${TIMESTAMP//:/-}"
+FILENAME="${SAFE_TIMESTAMP}_${SESSION_ID}.md"
+FILE_PATH="${OUTPUT_PATH:-$ARTIFACT_DIR/$FILENAME}"
+
+GIT_BRANCH=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+GIT_COMMIT=$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)
+GIT_REMOTE=$(git -C "$PROJECT_DIR" remote get-url origin 2>/dev/null || true)
+
+yaml_quote() {
+  local value="${1:-}"
+  value=${value//\\/\\\\}
+  value=${value//"/\\"}
+  printf '"%s"' "$value"
+}
+
+GOAL_VALUE=${GOAL:-"<TODO>"}
+NOW_VALUE=${NOW:-"<TODO>"}
+OUTCOME_VALUE=${OUTCOME:-"<TODO>"}
+
+CONTENT="---\n"
+CONTENT+="schema_version: \"1.0.0\"\n"
+CONTENT+="event_type: ${MODE}\n"
+CONTENT+="timestamp: ${TIMESTAMP}\n"
+CONTENT+="session_id: ${SESSION_ID}\n"
+if [[ -n "$SESSION_NAME" ]]; then
+  CONTENT+="session_name: $(yaml_quote "$SESSION_NAME")\n"
+fi
+if [[ -n "$PRIMARY_BEAD" ]]; then
+  CONTENT+="primary_bead: $(yaml_quote "$PRIMARY_BEAD")\n"
+fi
+CONTENT+="goal: $(yaml_quote "$GOAL_VALUE")\n"
+CONTENT+="now: $(yaml_quote "$NOW_VALUE")\n"
+CONTENT+="outcome: $(yaml_quote "$OUTCOME_VALUE")\n"
+
+if [[ -n "$GIT_BRANCH" || -n "$GIT_COMMIT" || -n "$GIT_REMOTE" ]]; then
+  CONTENT+="git:\n"
+  if [[ -n "$GIT_BRANCH" ]]; then
+    CONTENT+="  branch: $(yaml_quote "$GIT_BRANCH")\n"
+  fi
+  if [[ -n "$GIT_COMMIT" ]]; then
+    CONTENT+="  commit: $(yaml_quote "$GIT_COMMIT")\n"
+  fi
+  if [[ -n "$GIT_REMOTE" ]]; then
+    CONTENT+="  remote: $(yaml_quote "$GIT_REMOTE")\n"
+  fi
+fi
+
+CONTENT+="---\n\n"
+CONTENT+="# ${MODE^} Artifact\n\n"
+CONTENT+="# Add optional fields below as needed (this_session, next, blockers, questions, decisions, learnings, files, test, etc.)\n"
+
+if [[ "$STDOUT" -eq 1 ]]; then
+  printf "%b" "$CONTENT"
+  exit 0
+fi
+
+mkdir -p "$(dirname "$FILE_PATH")"
+printf "%b" "$CONTENT" > "$FILE_PATH"
+
+if [[ "$EDIT" -eq 1 ]]; then
+  "${EDITOR:-vi}" "$FILE_PATH"
+fi
+
+"$PYTHON_BIN" - "$FILE_PATH" "$MODE" <<'PY'
+import sys
+import re
+
+path = sys.argv[1]
+mode = sys.argv[2]
+
+text = open(path, "r", encoding="utf-8").read()
+match = re.search(r"^---\n(.*?)\n---", text, re.DOTALL)
+if not match:
+    print("Missing YAML frontmatter block", file=sys.stderr)
+    sys.exit(1)
+
+front = match.group(1).splitlines()
+data = {}
+for line in front:
+    if not line.strip():
+        continue
+    if line.startswith("  "):
+        continue
+    if ":" not in line:
+        continue
+    key, _, value = line.partition(":")
+    data[key.strip()] = value.strip().strip('"')
+
+missing = []
+for key in ("schema_version", "event_type", "timestamp", "goal", "now", "outcome"):
+    value = data.get(key, "").strip()
+    if not value or value in ("<TODO>", "TODO"):
+        missing.append(key)
+
+if missing:
+    print("Missing required fields: " + ", ".join(missing), file=sys.stderr)
+    sys.exit(1)
+
+if data.get("event_type") != mode:
+    print(f"event_type mismatch: expected {mode}", file=sys.stderr)
+    sys.exit(1)
+
+if mode in ("handoff", "finalize"):
+    bead = data.get("primary_bead", "").strip()
+    if not bead or bead in ("<TODO>", "TODO"):
+        print("primary_bead is required for handoff/finalize", file=sys.stderr)
+        sys.exit(1)
+PY
+
+echo "$FILE_PATH"

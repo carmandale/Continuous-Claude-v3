@@ -5,7 +5,7 @@ JSON Schema-based validation for unified artifacts (checkpoint, handoff, finaliz
 ## Quick Start
 
 ```typescript
-import { validateArtifactSchema, assertValidArtifact, isValidArtifact } from './artifact-validator.js';
+import { validateArtifactSchema, assertValidArtifact } from './artifact-validator.js';
 import { createArtifact } from './artifact-schema.js';
 
 // Create artifact
@@ -28,8 +28,8 @@ try {
   // Message includes all validation errors with field paths
 }
 
-// Boolean check
-if (isValidArtifact(artifact)) {
+// Use validation result for conditional logic
+if (result.valid) {
   await writeArtifact(artifact);
 }
 ```
@@ -62,10 +62,6 @@ Validate artifact against JSON Schema. Returns detailed errors.
 Validate and throw on failure. Use for write-time validation.
 
 **Throws:** Error with formatted message listing all validation errors.
-
-### `isValidArtifact(artifact: unknown): artifact is UnifiedArtifact`
-
-Boolean convenience for conditional logic.
 
 ## Validation Rules
 
@@ -129,15 +125,14 @@ Artifact validation failed:
 ## Integration Example
 
 ```typescript
-// In writeArtifact() function
-export async function writeArtifact(artifact: unknown, filePath: string): Promise<void> {
-  // Validate before write
-  assertValidArtifact(artifact);
+import { writeArtifact } from './artifact-writer.js';
 
-  // Safe to proceed - artifact is guaranteed valid
-  const content = YAML.stringify(artifact);
-  await writeFile(filePath, content, 'utf-8');
-}
+// Validate before write
+assertValidArtifact(artifact);
+
+// Safe to proceed - artifact is guaranteed valid
+const path = await writeArtifact(artifact);
+console.log(`Wrote artifact to ${path}`);
 ```
 
 ## Schema Location

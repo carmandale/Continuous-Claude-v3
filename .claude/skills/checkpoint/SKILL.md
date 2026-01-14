@@ -86,7 +86,7 @@ thoughts/shared/handoffs/events/YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
 
 ### 5. Using CLI Wrapper (Alternative)
 
-There's a CLI wrapper for direct bash usage:
+There's a CLI wrapper for direct bash usage (note: it does NOT auto-gather git metadata):
 
 ```bash
 # From project root
@@ -94,15 +94,14 @@ node .claude/hooks/dist/write-checkpoint-cli.mjs \
   --goal "Current work description" \
   --now "Current focus" \
   --outcome PARTIAL_PLUS \
-  --bead beads-xxx  # Optional
+  --primary_bead beads-xxx  # Optional
 ```
 
 The CLI will:
-1. Gather git metadata automatically
-2. Generate timestamp and session ID
-3. Validate against schema
-4. Write to unified location
-5. Return the artifact path
+1. Generate timestamp and session ID
+2. Validate against schema
+3. Write to unified location
+4. Return the artifact path
 
 ## Checkpoint Philosophy
 

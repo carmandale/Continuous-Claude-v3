@@ -185,7 +185,7 @@ learnings:
 git:
   branch: feat/continuity-system
   commit: abc1234
-  pr_ready: "yes"
+  pr_ready: "https://example.com/pull/123"
 
 files:
   created:

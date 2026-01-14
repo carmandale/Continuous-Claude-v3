@@ -232,7 +232,12 @@ def main() -> int:
     content = p.read_text(encoding="utf-8")
     front, body = split_frontmatter(content)
 
-    session_name = front.get("session") or derive_session_name(file_path)
+    session_name = (
+        front.get("session")
+        or front.get("session_name")
+        or front.get("session_id")
+        or derive_session_name(file_path)
+    )
     if not session_name:
         print("Could not determine session name", file=sys.stderr)
         return 2
@@ -240,7 +245,7 @@ def main() -> int:
     outcome = front.get("outcome") or front.get("status")
     root_span_id = front.get("root_span_id") or None
 
-    goal = extract_scalar(body, "goal")
+    goal = front.get("goal") or extract_scalar(body, "goal")
 
     # These are stored as raw section text (human-readable + searchable)
     what_worked = extract_section_text(body, "worked")
@@ -255,7 +260,7 @@ def main() -> int:
         session_name=session_name,
         file_path=str(p.resolve()),
         fmt=fmt,
-        session_id=args.session_id,
+        session_id=args.session_id or front.get("session_id"),
         agent_id=args.agent_id,
         root_span_id=root_span_id,
         goal=goal,

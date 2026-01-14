@@ -48,7 +48,11 @@ function parseArgs(): CLIArgs {
     const value = args[i + 1];
 
     if (arg.startsWith('--')) {
-      const key = arg.slice(2);
+      let key = arg.slice(2);
+
+      if (key === 'bead') {
+        key = 'primary_bead';
+      }
 
       // Array arguments
       if (key === 'next' || key === 'blockers' || key === 'questions') {

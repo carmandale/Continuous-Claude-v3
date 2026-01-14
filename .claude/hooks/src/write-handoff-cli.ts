@@ -3,7 +3,7 @@
  * CLI tool to create handoff artifacts using the unified writeArtifact() system.
  *
  * Usage:
- *   node write-handoff-cli.js --goal "..." --now "..." --outcome SUCCEEDED --bead beads-xxx [options]
+ *   node write-handoff-cli.js --goal "..." --now "..." --outcome SUCCEEDED --primary_bead beads-xxx [options]
  *
  * This script provides a bash-callable interface to the TypeScript writeArtifact() function
  * for the /handoff skill.
@@ -48,7 +48,11 @@ function parseArgs(): CLIArgs {
     const value = args[i + 1];
 
     if (arg.startsWith('--')) {
-      const key = arg.slice(2);
+      let key = arg.slice(2);
+
+      if (key === 'bead') {
+        key = 'primary_bead';
+      }
 
       // Array arguments
       if (key === 'next' || key === 'blockers' || key === 'questions' || key === 'related_beads') {

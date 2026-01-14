@@ -269,7 +269,7 @@ Task(
   [Content of task-02-*.md or "This is the first task"]
 
   ### Handoff Directory:
-  thoughts/handoffs/open-source-release/
+  thoughts/shared/handoffs/events/
 
   ---
 

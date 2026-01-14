@@ -52,7 +52,7 @@ All artifacts share these base fields:
     branch: string;
     commit: string;
     remote?: string;
-    pr_ready?: string;
+    pr_ready?: string;          // URL if applicable
   };
 
   files?: {
@@ -100,7 +100,7 @@ Checkpoint is the lightest-weight mode, using only common fields.
   final_decisions?: Decision[];
   artifacts_produced?: Array<{
     path: string;
-    description?: string;
+    note?: string;
   }>;
 }
 ```
@@ -361,12 +361,12 @@ continuation_prompt: |
 
 ## Storage Convention
 
-Artifacts are stored in: `thoughts/shared/handoffs/{session-name}/YYYY-MM-DD_HH-MM_{description}.yaml`
+Artifacts are stored in: `thoughts/shared/handoffs/events/YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md`
 
 Examples:
-- `thoughts/shared/handoffs/auth-refactor/2026-01-13_10-00_checkpoint.yaml`
-- `thoughts/shared/handoffs/auth-refactor/2026-01-13_15-00_handoff-to-session-2.yaml`
-- `thoughts/shared/handoffs/auth-refactor/2026-01-13_18-00_finalize-complete.yaml`
+- `thoughts/shared/handoffs/events/2026-01-14T00-54-26.972Z_77ef540c.md`
+- `thoughts/shared/handoffs/events/2026-01-14T01-22-06.625Z_8c25a60a.md`
+- `thoughts/shared/handoffs/events/2026-01-14T02-39-48.315Z_5e975609.md`
 
 ## Migration from Legacy Formats
 
@@ -404,7 +404,7 @@ Checkpoint artifacts now use the same unified schema with `event_type: checkpoin
 
 - **Plan**: `thoughts/shared/plans/2026-01-13-unified-artifact-system.md`
 - **Implementation**: `.claude/hooks/src/shared/artifact-schema.ts`
-- **Examples**: `thoughts/shared/handoffs/`
+- **Examples**: `thoughts/shared/handoffs/events/`
 - **Slash Commands**: `~/.claude/commands/{checkpoint,handoff,finalize}.md`
 
 ## Version History

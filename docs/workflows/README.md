@@ -236,7 +236,7 @@ arbiter: ✅ 45/45 tests passing
          ✅ Type checks passing
 
 scribe: Updated docs/auth.md
-        Created handoff at thoughts/handoffs/jwt-auth/
+        Created handoff at thoughts/shared/handoffs/events/
 
 Build complete!
 ```
@@ -970,10 +970,10 @@ Workflows create handoffs for continuity:
 
 ```
 thoughts/shared/handoffs/
-├── feature-name/
-│   ├── current.md        # Latest state
-│   ├── 01-research.md    # Research findings
-│   └── 02-plan.md        # Implementation plan
+└── events/
+    ├── 2026-01-14T00-54-26.972Z_77ef540c.md
+    ├── 2026-01-14T01-22-06.625Z_8c25a60a.md
+    └── 2026-01-14T02-39-48.315Z_5e975609.md
 ```
 
 Use handoffs to:

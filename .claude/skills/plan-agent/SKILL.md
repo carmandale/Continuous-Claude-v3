@@ -343,7 +343,7 @@ Task(
   [Ledger content if exists]
 
   ### Handoff Directory:
-  thoughts/handoffs/open-source-release/
+  thoughts/shared/handoffs/events/
 
   ---
 

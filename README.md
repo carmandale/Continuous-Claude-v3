@@ -781,28 +781,20 @@ schema_version: "1.0.0"
 event_type: handoff
 timestamp: 2026-01-14T00:54:26.972Z
 session_id: 77ef540c
+goal: Feature X implementation with proper error handling
+now: Add retry logic and integration tests
+outcome: PARTIAL_PLUS
 ---
 
-# Session Handoff
+this_session:
+  - task: Design API schema
+    files: [api/schema.py, api/types.py]
+  - task: Implement core logic
+    files: [core/processor.py]
 
-## Goal
-Feature X implementation with proper error handling
-
-## Current Status
-Implemented core logic, error handling remains
-
-## Completed This Session
-- task: Design API schema
-  files: [api/schema.py, api/types.py]
-- task: Implement core logic
-  files: [core/processor.py]
-
-## Next Steps
-1. Add retry logic to API calls
-2. Write integration tests
-
-## Outcome
-PARTIAL_PLUS
+next:
+  - Add retry logic to API calls
+  - Write integration tests
 ```
 
 #### Commands
