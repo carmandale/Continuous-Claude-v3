@@ -4,91 +4,151 @@ description: Create handoff document for transferring work to another session
 
 # Create Handoff
 
-You are tasked with writing a handoff document to hand off your work to another agent in a new session. You will create a handoff document that is thorough, but also **concise**. The goal is to compact and summarize your context without losing any of the key details of what you're working on.
+You are tasked with writing a handoff document to hand off your work to another agent in a new session. This is a **session transfer** - capturing current state for continuation in a new session.
 
+## When to Use
+
+Use `/handoff` when:
+- You need to transfer work to another session (ongoing work)
+- A session is ending but work continues
+- You want to preserve context for the next session
+- Handing off mid-task or between milestones
+
+**Key difference from /finalize:**
+- **Handoff**: Transfer ongoing work to next session
+- **Finalize**: Memorial of completed work (closure)
 
 ## Process
-### 1. Filepath & Metadata
-Use the following information to understand how to create your document:
 
-**First, determine the session name from existing handoffs:**
+### 1. Gather Session Context
+
+First, determine the bead you're working on:
+
 ```bash
-ls -td thoughts/shared/handoffs/*/ 2>/dev/null | head -1 | xargs basename
+bd list --status=in_progress
 ```
 
-This returns the most recently modified handoff folder name (e.g., `open-source-release`). Use this as the handoff folder name.
+If no bead is in progress, handoff requires a bead - ask the user which bead to hand off.
 
-If no handoffs exist, use `general` as the folder name.
+### 2. Create Unified Artifact
 
-**Create your file under:** `thoughts/shared/handoffs/{session-name}/YYYY-MM-DD_HH-MM_description.yaml`, where:
-- `{session-name}` is from existing handoffs (e.g., `open-source-release`) or `general` if none exist
-- `YYYY-MM-DD` is today's date
-- `HH-MM` is the current time in 24-hour format (no seconds needed)
-- `description` is a brief kebab-case description
+This skill uses the unified artifact system. Write the artifact in YAML frontmatter format to:
 
-**Examples:**
-- `thoughts/shared/handoffs/open-source-release/2026-01-08_16-30_memory-system-fix.yaml`
-- `thoughts/shared/handoffs/general/2026-01-08_16-30_bug-investigation.yaml`
+```
+thoughts/shared/handoffs/events/YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
+```
 
-### 2. Write YAML handoff (~400 tokens vs ~2000 for markdown)
+**Filename format:**
+- `YYYY-MM-DDTHH-MM-SS.sssZ`: ISO timestamp with colons replaced by hyphens
+- `sessionid`: 8-character hex identifier (generate random if not available)
+- Example: `2026-01-14T01-23-45.678Z_abc12345.md`
 
-**CRITICAL: Use EXACTLY this YAML format. Do NOT deviate or use alternative field names.**
+### 3. Required Fields
 
-The `goal:` and `now:` fields are shown in the statusline - they MUST be named exactly this.
+**Core fields (all artifacts):**
+- `schema_version`: "1.0.0"
+- `event_type`: "handoff"
+- `timestamp`: ISO 8601 timestamp (e.g., "2026-01-14T01:23:45.678Z")
+- `goal`: What this session accomplished
+- `now`: What next session should do first
+- `outcome`: SUCCEEDED | PARTIAL_PLUS | PARTIAL_MINUS | FAILED
+- `primary_bead`: The bead being handed off (REQUIRED for handoff)
+
+**Handoff-specific fields:**
+- `related_beads`: Array of related bead IDs (optional)
+- `files_to_review`: Array of {path, note} objects for next session (optional)
+- `continuation_prompt`: Specific instructions for resuming (optional)
+
+**Optional but recommended:**
+- `session_id`: 8-char hex identifier
+- `session_name`: Descriptive session name
+- `this_session`: Array of completed tasks with files
+- `next`: Array of next steps
+- `blockers`: Array of blocking issues
+- `questions`: Array of unresolved questions
+- `decisions`: Record of key decisions (simple format) or array of Decision objects
+- `learnings`: Object with `worked` and `failed` arrays
+- `findings`: Record of key discoveries
+- `git`: Branch, commit, remote, pr_ready
+- `files`: Object with created, modified, deleted arrays
+- `test`: Command to verify the work
+
+### 4. YAML Format
 
 ```yaml
 ---
-session: {session-name from ledger}
-date: YYYY-MM-DD
-status: complete|partial|blocked
-outcome: SUCCEEDED|PARTIAL_PLUS|PARTIAL_MINUS|FAILED
+schema_version: "1.0.0"
+event_type: handoff
+timestamp: 2026-01-14T01:23:45.678Z
+session_id: abc12345
+session_name: descriptive-name
+goal: What this session accomplished
+now: What next session should do first
+outcome: PARTIAL_PLUS
+primary_bead: Continuous-Claude-v3-ug8.6
 ---
 
-goal: {What this session accomplished - shown in statusline}
-now: {What next session should do first - shown in statusline}
-test: {Command to verify this work, e.g., pytest tests/test_foo.py}
-
-done_this_session:
-  - task: {First completed task}
-    files: [{file1.py}, {file2.py}]
-  - task: {Second completed task}
-    files: [{file3.py}]
-
-blockers: [{any blocking issues}]
-
-questions: [{unresolved questions for next session}]
-
-decisions:
-  - {decision_name}: {rationale}
-
-findings:
-  - {key_finding}: {details}
-
-worked: [{approaches that worked}]
-failed: [{approaches that failed and why}]
+this_session:
+  - task: First completed task
+    files:
+      - path/to/file1.ts
+      - path/to/file2.ts
+  - task: Second completed task
+    files:
+      - path/to/file3.ts
 
 next:
-  - {First next step}
-  - {Second next step}
+  - First step for next session
+  - Second step for next session
+
+blockers:
+  - Blocking issue 1
+  - Blocking issue 2
+
+questions:
+  - Unresolved question 1
+  - Unresolved question 2
+
+decisions:
+  decision_name: Rationale for this decision
+
+learnings:
+  worked:
+    - Approach that worked
+  failed:
+    - Approach that failed and why
+
+findings:
+  key_finding: Details about this finding
+
+related_beads:
+  - beads-xxx
+  - beads-yyy
+
+files_to_review:
+  - path: src/important-file.ts
+    note: Focus on the authentication logic here
+
+continuation_prompt: |
+  Start by reviewing the auth flow in src/auth.ts.
+  The next step is to implement the refresh token logic.
+
+git:
+  branch: feat/auth-system
+  commit: abc1234
+  remote: origin
+  pr_ready: "no"
 
 files:
-  created: [{new files}]
-  modified: [{changed files}]
+  created:
+    - new-file.ts
+  modified:
+    - existing-file.ts
+
+test: npm test
 ```
 
-**Field guide:**
-- `goal:` + `now:` - REQUIRED, shown in statusline
-- `done_this_session:` - What was accomplished with file references
-- `decisions:` - Important choices and rationale
-- `findings:` - Key learnings
-- `worked:` / `failed:` - What to repeat vs avoid
-- `next:` - Action items for next session
-
-**DO NOT use alternative field names like `session_goal`, `objective`, `focus`, `current`, etc.**
-**The statusline parser looks for EXACTLY `goal:` and `now:` - nothing else works.**
----
-
-### 3. Mark Session Outcome (REQUIRED)
+### 5. Mark Session Outcome (REQUIRED)
 
 **IMPORTANT:** Before responding to the user, you MUST ask about the session outcome.
 
@@ -103,29 +163,95 @@ Options:
   - FAILED: Task abandoned or blocked
 ```
 
-After the user responds, mark the outcome:
-```bash
-# Mark the most recent handoff (works with PostgreSQL or SQLite)
-# Use git root to find project, then opc/scripts/core/
-PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "${CLAUDE_PROJECT_DIR:-.}")
-cd "$PROJECT_ROOT/opc" && uv run python scripts/core/artifact_mark.py --latest --outcome <USER_CHOICE>
-```
+After the user responds, the outcome is included in the YAML.
 
-This command auto-detects the database (PostgreSQL if configured, SQLite fallback).
+### 6. Confirm Completion
 
-### 4. Confirm completion
-
-After marking the outcome, respond to the user:
+Respond to the user:
 
 ```
-Handoff created! Outcome marked as [OUTCOME].
+Handoff created! Outcome: [OUTCOME]
 
 Resume in a new session with:
-/resume_handoff path/to/handoff.yaml
+/resume_handoff thoughts/shared/handoffs/events/[filename]
 ```
 
 ---
-##.  Additional Notes & Instructions
-- **more information, not less**. This is a guideline that defines the minimum of what a handoff should be. Always feel free to include more information if necessary.
-- **be thorough and precise**. include both top-level objectives, and lower-level details as necessary.
-- **avoid excessive code snippets**. While a brief snippet to describe some key change is important, avoid large code blocks or diffs; do not include one unless it's necessary (e.g. pertains to an error you're debugging). Prefer using `/path/to/file.ext:line` references that an agent can follow later when it's ready, e.g. `packages/dashboard/src/app/dashboard/page.tsx:12-24`
+
+## Example Handoff Structure
+
+```yaml
+---
+schema_version: "1.0.0"
+event_type: handoff
+timestamp: 2026-01-14T01:23:45.678Z
+session_id: abc12345
+session_name: refactor-handoff-skill
+goal: Refactor /handoff to use unified artifact system
+now: Continue testing the refactored handoff skill
+outcome: PARTIAL_PLUS
+primary_bead: Continuous-Claude-v3-ug8.6
+---
+
+this_session:
+  - task: Updated handoff skill to use unified schema
+    files:
+      - .claude/skills/create_handoff/SKILL.md
+  - task: Created CLI wrapper for writeArtifact
+    files:
+      - .claude/hooks/src/write-handoff-cli.ts
+
+next:
+  - Test handoff skill with real session
+  - Verify YAML validation works
+  - Update documentation
+
+blockers:
+  - Need to verify CLI script builds correctly
+
+related_beads:
+  - Continuous-Claude-v3-ug8.1
+  - Continuous-Claude-v3-ug8.2
+
+files_to_review:
+  - path: .claude/hooks/src/shared/artifact-writer.ts
+    note: Core writer implementation
+  - path: .claude/hooks/src/shared/artifact-schema.ts
+    note: Schema definitions
+
+continuation_prompt: |
+  Test the updated handoff skill by creating a real handoff.
+  Verify the YAML format matches the schema.
+
+learnings:
+  worked:
+    - Unified schema approach simplifies skill implementation
+  failed:
+    - Initial attempt to call TypeScript from bash was complex
+
+git:
+  branch: feat/continuity-system
+  commit: fb84207
+  pr_ready: "no"
+
+files:
+  modified:
+    - .claude/skills/create_handoff/SKILL.md
+  created:
+    - .claude/hooks/src/write-handoff-cli.ts
+
+test: npm test --prefix .claude/hooks
+```
+
+---
+
+## Additional Notes
+
+- **Be thorough and concise**: Include key details without excessive verbosity
+- **Avoid large code snippets**: Use file:line references (e.g., `src/file.ts:42-56`)
+- **Focus on context**: What does the next session need to know?
+- **Link files**: Reference important files with notes for next session
+- **primary_bead is REQUIRED**: Handoff must be tied to a bead
+- **Use continuation_prompt**: Give specific instructions for resuming work
+
+This skill provides a structured handoff for ongoing work, ensuring smooth continuation in the next session.
