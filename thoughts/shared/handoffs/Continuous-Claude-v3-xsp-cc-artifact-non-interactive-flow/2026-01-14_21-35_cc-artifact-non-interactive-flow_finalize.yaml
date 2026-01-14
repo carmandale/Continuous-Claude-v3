@@ -1,0 +1,34 @@
+---
+schema_version: "1.0.0"
+mode: finalize
+date: 2026-01-14T21:35:09.719Z
+session: "Continuous-Claude-v3-xsp-cc-artifact-non-interactive-flow"
+outcome: "SUCCEEDED"
+primary_bead: "Continuous-Claude-v3-xsp"
+---
+
+goal: "Harden cc-artifact non-interactive flow and bead validation"
+now: "Non-interactive path added, bead validation enforced, outcome normalized; tests passed"
+
+# Optional fields (YAML)
+# done_this_session:, next:, blockers:, questions:, decisions:, findings:, worked:, failed:, files:, test:, git:
+done_this_session:
+  - Added non-interactive mode and enforced required fields for no-edit.
+  - Validated bead existence via bd and warned if not in_progress.
+  - Normalized outcome values and defaulted to skip editor when fields provided.
+final_solutions:
+  - Non-interactive cc-artifact usage now avoids editor loops and requires goal/now/outcome.
+  - Bead validation prevents accidental handoff creation without a real bead.
+final_decisions:
+  - Auto-skip editor when required fields are provided and no edit flag set.
+  - Fail fast when no-edit/non-interactive lacks required fields.
+artifacts_produced:
+  - "feat: harden cc-artifact non-interactive flow (commit f2efc34)"
+test: "cc-artifact non-interactive + auto no-edit smoke tests"
+files:
+  - ".claude/scripts/cc-artifact"
+  - ".learnings/LEARNINGS.md"
+git:
+  branch: "feat/continuity-system"
+  commit: "f2efc34b26ce2f4e9b51e718208265db3ce2aeed"
+  remote: "https://github.com/carmandale/Continuous-Claude-v3.git"
