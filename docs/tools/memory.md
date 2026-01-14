@@ -329,6 +329,12 @@ Query memory when:
 By default, memories are scoped to the current project (based on `CLAUDE_PROJECT_DIR`).
 To search across all projects, pass `--all-projects` to the recall command.
 
+To backfill existing memories with project metadata:
+```bash
+uv run python scripts/core/backfill_memory_project.py --dry-run
+uv run python scripts/core/backfill_memory_project.py
+```
+
 ### Example Workflow
 
 ```bash
