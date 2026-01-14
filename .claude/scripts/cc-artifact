@@ -15,6 +15,7 @@ Options:
   --goal <text>           Optional goal (if omitted, placeholder is inserted)
   --now <text>            Optional current focus (if omitted, placeholder is inserted)
   --outcome <value>       Optional outcome (SUCCEEDED|PARTIAL_PLUS|PARTIAL_MINUS|FAILED)
+  --non-interactive       Require goal/now/outcome and skip editor
   --no-edit               Do not open editor after generating the template
   --edit                  Open editor after generating the template (default)
   --stdout                Print template to stdout instead of writing a file
@@ -38,6 +39,8 @@ GOAL=""
 NOW=""
 OUTCOME=""
 EDIT=1
+EDIT_SET=0
+NON_INTERACTIVE=0
 STDOUT=0
 OUTPUT_PATH=""
 
@@ -59,10 +62,12 @@ while [[ $# -gt 0 ]]; do
       NOW="${2:-}"; shift 2 ;;
     --outcome)
       OUTCOME="${2:-}"; shift 2 ;;
+    --non-interactive|--noninteractive)
+      NON_INTERACTIVE=1; EDIT=0; EDIT_SET=1; shift ;;
     --no-edit)
-      EDIT=0; shift ;;
+      EDIT=0; EDIT_SET=1; shift ;;
     --edit)
-      EDIT=1; shift ;;
+      EDIT=1; EDIT_SET=1; shift ;;
     --stdout)
       STDOUT=1; shift ;;
     --output)
@@ -108,6 +113,17 @@ if [[ "$MODE" == "handoff" || "$MODE" == "finalize" ]]; then
   fi
 fi
 
+if [[ -n "$OUTCOME" ]]; then
+  OUTCOME="${OUTCOME^^}"
+  case "$OUTCOME" in
+    SUCCEEDED|PARTIAL_PLUS|PARTIAL_MINUS|FAILED) ;;
+    *)
+      echo "Error: --outcome must be one of SUCCEEDED, PARTIAL_PLUS, PARTIAL_MINUS, FAILED" >&2
+      exit 1
+      ;;
+  esac
+fi
+
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 if git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
   PROJECT_DIR=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel)
@@ -119,6 +135,42 @@ PYTHON_BIN=$(command -v python3 || command -v python || true)
 if [[ -z "$PYTHON_BIN" ]]; then
   echo "Error: python3 (or python) is required to generate timestamps" >&2
   exit 1
+fi
+
+if [[ -n "$PRIMARY_BEAD" ]]; then
+  if command -v bd >/dev/null 2>&1; then
+    if ! bd show "$PRIMARY_BEAD" >/dev/null 2>&1; then
+      echo "Error: bead not found: $PRIMARY_BEAD" >&2
+      echo "Run: bd list --status in_progress --json" >&2
+      exit 1
+    fi
+    in_progress=$("$PYTHON_BIN" - "$PRIMARY_BEAD" <<'PY'
+import json
+import subprocess
+import sys
+
+bead = sys.argv[1]
+try:
+    out = subprocess.check_output([
+        "bd",
+        "list",
+        "--status",
+        "in_progress",
+        "--json",
+    ], text=True)
+    data = json.loads(out)
+    ids = {item.get("id") for item in data}
+    print("yes" if bead in ids else "no")
+except Exception:
+    print("unknown")
+PY
+)
+    if [[ "$in_progress" == "no" ]]; then
+      echo "Warning: bead '$PRIMARY_BEAD' is not in_progress. Consider: bd update $PRIMARY_BEAD --status=in_progress" >&2
+    fi
+  else
+    echo "Warning: bd not found; skipping bead validation." >&2
+  fi
 fi
 
 TIMESTAMP=$("$PYTHON_BIN" - <<'PY'
@@ -181,6 +233,33 @@ yaml_quote() {
 GOAL_VALUE=${GOAL:-"<TODO>"}
 NOW_VALUE=${NOW:-"<TODO>"}
 OUTCOME_VALUE=${OUTCOME:-"<TODO>"}
+
+missing_required=()
+if [[ -z "$GOAL" ]]; then
+  missing_required+=("goal")
+fi
+if [[ -z "$NOW" ]]; then
+  missing_required+=("now")
+fi
+if [[ -z "$OUTCOME" ]]; then
+  missing_required+=("outcome")
+fi
+
+if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
+  if [[ ${#missing_required[@]} -gt 0 ]]; then
+    echo "Error: --non-interactive requires --goal, --now, and --outcome (missing: ${missing_required[*]})" >&2
+    exit 1
+  fi
+fi
+
+if [[ "$EDIT" -eq 0 && ${#missing_required[@]} -gt 0 ]]; then
+  echo "Error: --no-edit requires --goal, --now, and --outcome (missing: ${missing_required[*]})" >&2
+  exit 1
+fi
+
+if [[ "$EDIT_SET" -eq 0 && ${#missing_required[@]} -eq 0 ]]; then
+  EDIT=0
+fi
 
 CONTENT="---\n"
 CONTENT+="schema_version: \"1.0.0\"\n"
