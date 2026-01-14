@@ -301,10 +301,16 @@
           "event_type": {
             "enum": ["handoff", "finalize"]
           }
-        }
+        },
+        "required": ["event_type"]
       },
       "then": {
-        "required": ["primary_bead"]
+        "required": ["primary_bead"],
+        "properties": {
+          "primary_bead": {
+            "type": "string"
+          }
+        }
       }
     }
   ]

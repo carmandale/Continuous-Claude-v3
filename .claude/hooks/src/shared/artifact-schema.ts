@@ -233,7 +233,9 @@ export function requiresBead(eventType: ArtifactEventType): boolean {
 // =============================================================================
 
 /**
- * Validate artifact structure at runtime
+ * Validate artifact structure at runtime (basic TypeScript checks)
+ *
+ * @deprecated Use validateArtifactSchema() from artifact-validator.ts for full JSON Schema validation
  */
 export function validateArtifact(artifact: unknown): artifact is UnifiedArtifact {
   if (!artifact || typeof artifact !== 'object') {
