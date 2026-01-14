@@ -6,8 +6,7 @@
  * - Legacy format: .../handoffs/<session-name>/...
  */
 
-import { describe, it } from 'node:test';
-import * as assert from 'node:assert';
+import { describe, it, expect } from 'vitest';
 
 /**
  * Extract session name from handoff file path.
@@ -67,49 +66,49 @@ describe('extractSessionName', () => {
   it('should extract session name from unified artifact path', () => {
     const path = 'thoughts/shared/handoffs/test-session/2026-01-14_00-54_checkpoint.yaml';
     const result = extractSessionName(path);
-    assert.strictEqual(result, 'test-session');
+    expect(result).toBe('test-session');
   });
 
   it('should extract session name from absolute unified path', () => {
     const path = '/Users/test/project/thoughts/shared/handoffs/auth-refactor/2026-01-14_01-22_handoff.yaml';
     const result = extractSessionName(path);
-    assert.strictEqual(result, 'auth-refactor');
+    expect(result).toBe('auth-refactor');
   });
 
   it('should extract session name from Windows unified path', () => {
     const path = 'C:\\project\\thoughts\\shared\\handoffs\\bead-123-auth\\2026-01-14_02-03_handoff.yaml';
     const result = extractSessionName(path);
-    assert.strictEqual(result, 'bead-123-auth');
+    expect(result).toBe('bead-123-auth');
   });
 
   it('should fallback to legacy session name extraction', () => {
     const path = 'thoughts/shared/handoffs/my-session/handoff-001.md';
     const result = extractSessionName(path);
-    assert.strictEqual(result, 'my-session');
+    expect(result).toBe('my-session');
   });
 
   it('should handle nested legacy paths', () => {
     const path = '/home/user/project/thoughts/shared/handoffs/test-session/2024-01-01.md';
     const result = extractSessionName(path);
-    assert.strictEqual(result, 'test-session');
+    expect(result).toBe('test-session');
   });
 
   it('should return null for non-handoff paths', () => {
     const path = '/project/thoughts/shared/other/file.md';
     const result = extractSessionName(path);
-    assert.strictEqual(result, null);
+    expect(result).toBe(null);
   });
 
   it('should return null for paths with no session info', () => {
     const path = 'some-random-file.md';
     const result = extractSessionName(path);
-    assert.strictEqual(result, null);
+    expect(result).toBe(null);
   });
 
   it('should handle handoffs at end of path (no session)', () => {
     const path = '/project/thoughts/shared/handoffs';
     const result = extractSessionName(path);
-    assert.strictEqual(result, null);
+    expect(result).toBe(null);
   });
 });
 
@@ -125,10 +124,10 @@ session_id: 77ef540c
 # Content here`;
 
     const result = extractFrontmatter(content);
-    assert.strictEqual(result.mode, 'checkpoint');
-    assert.strictEqual(result.schema_version, '1.0.0');
-    assert.strictEqual(result.session, 'test-session');
-    assert.strictEqual(result.session_id, '77ef540c');
+    expect(result.mode).toBe('checkpoint');
+    expect(result.schema_version).toBe('1.0.0');
+    expect(result.session).toBe('test-session');
+    expect(result.session_id).toBe('77ef540c');
   });
 
   it('should extract handoff mode', () => {
@@ -138,7 +137,7 @@ mode: handoff
 ---`;
 
     const result = extractFrontmatter(content);
-    assert.strictEqual(result.mode, 'handoff');
+    expect(result.mode).toBe('handoff');
   });
 
   it('should extract finalize mode', () => {
@@ -147,13 +146,13 @@ mode: finalize
 ---`;
 
     const result = extractFrontmatter(content);
-    assert.strictEqual(result.mode, 'finalize');
+    expect(result.mode).toBe('finalize');
   });
 
   it('should return empty object for content without frontmatter', () => {
     const content = 'Just plain content without frontmatter';
     const result = extractFrontmatter(content);
-    assert.deepStrictEqual(result, {});
+    expect(result).toEqual({});
   });
 
   it('should handle frontmatter with extra fields', () => {
@@ -165,8 +164,8 @@ goal: Test the system
 ---`;
 
     const result = extractFrontmatter(content);
-    assert.strictEqual(result.mode, 'checkpoint');
-    assert.strictEqual(result.schema_version, '1.0.0');
+    expect(result.mode).toBe('checkpoint');
+    expect(result.schema_version).toBe('1.0.0');
   });
 
   it('should ignore malformed lines in frontmatter', () => {
@@ -177,7 +176,7 @@ schema_version: 1.0.0
 ---`;
 
     const result = extractFrontmatter(content);
-    assert.strictEqual(result.mode, 'handoff');
-    assert.strictEqual(result.schema_version, '1.0.0');
+    expect(result.mode).toBe('handoff');
+    expect(result.schema_version).toBe('1.0.0');
   });
 });

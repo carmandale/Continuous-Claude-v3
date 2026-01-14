@@ -1,114 +1,161 @@
-// src/skill-router.ts
-import { join } from "path";
+/**
+ * Skill Router helpers (Phase 2-6)
+ *
+ * Minimal implementation to support prerequisite resolution, co-activation,
+ * loading mode, and enhanced lookup results.
+ */
 
-// src/shared/skill-router-types.ts
-var CircularDependencyError = class extends Error {
-  constructor(cyclePath) {
-    super(`Circular dependency detected: ${cyclePath.join(" -> ")}`);
-    this.cyclePath = cyclePath;
-    this.name = "CircularDependencyError";
-  }
+import { join } from 'path';
+import type { SkillRulesConfig, SkillLookupResult } from './shared/skill-router-types.js';
+import { CircularDependencyError } from './shared/skill-router-types.js';
+
+type SkillRuleMatch = {
+  skillName: string;
+  source: SkillLookupResult['source'];
+  priorityValue: number;
 };
 
-// src/skill-router.ts
-function topologicalSort(skillName, rules) {
-  const visited = /* @__PURE__ */ new Set();
-  const result = [];
-  const inProgress = /* @__PURE__ */ new Set();
-  function visit(name, path = []) {
+export function topologicalSort(skillName: string, rules: SkillRulesConfig): string[] {
+  const visited = new Set<string>();
+  const result: string[] = [];
+  const inProgress = new Set<string>();
+
+  function visit(name: string, path: string[] = []): void {
     if (inProgress.has(name)) {
       throw new CircularDependencyError([...path, name]);
     }
     if (visited.has(name)) return;
+
     inProgress.add(name);
+
     const rule = rules.skills?.[name];
     const deps = [
-      ...rule?.prerequisites?.require || [],
-      ...rule?.prerequisites?.suggest || []
+      ...(rule?.prerequisites?.require || []),
+      ...(rule?.prerequisites?.suggest || []),
     ];
+
     for (const dep of deps) {
       visit(dep, [...path, name]);
     }
+
     inProgress.delete(name);
     visited.add(name);
     result.push(name);
   }
+
   visit(skillName);
   return result;
 }
-function detectCircularDependency(skillName, rules, visited = /* @__PURE__ */ new Set(), stack = /* @__PURE__ */ new Set(), path = []) {
+
+export function detectCircularDependency(
+  skillName: string,
+  rules: SkillRulesConfig,
+  visited: Set<string> = new Set(),
+  stack: Set<string> = new Set(),
+  path: string[] = []
+): string[] | null {
   if (stack.has(skillName)) {
     return [...path, skillName];
   }
+
   if (visited.has(skillName)) {
     return null;
   }
+
   visited.add(skillName);
   stack.add(skillName);
   path.push(skillName);
+
   const rule = rules.skills?.[skillName];
   const deps = [
-    ...rule?.prerequisites?.require || [],
-    ...rule?.prerequisites?.suggest || []
+    ...(rule?.prerequisites?.require || []),
+    ...(rule?.prerequisites?.suggest || []),
   ];
+
   for (const dep of deps) {
     const cycle = detectCircularDependency(dep, rules, visited, stack, [...path]);
     if (cycle) return cycle;
   }
+
   stack.delete(skillName);
   return null;
 }
-function resolvePrerequisites(skillName, rules) {
+
+export function resolvePrerequisites(
+  skillName: string,
+  rules: SkillRulesConfig
+): { suggest: string[]; require: string[]; loadOrder: string[] } {
   const rule = rules.skills?.[skillName];
   if (!rule?.prerequisites) {
     return { suggest: [], require: [], loadOrder: [skillName] };
   }
+
   const cycle = detectCircularDependency(skillName, rules);
   if (cycle) {
     throw new CircularDependencyError(cycle);
   }
+
   const loadOrder = topologicalSort(skillName, rules);
   return {
     suggest: rule.prerequisites.suggest || [],
     require: rule.prerequisites.require || [],
-    loadOrder
+    loadOrder,
   };
 }
-function resolveCoActivation(skillName, rules) {
+
+export function resolveCoActivation(
+  skillName: string,
+  rules: SkillRulesConfig
+): { peers: string[]; mode: 'all' | 'any' } {
   const rule = rules.skills?.[skillName];
   if (!rule?.coActivate) {
-    return { peers: [], mode: "any" };
+    return { peers: [], mode: 'any' };
   }
+
   const peers = rule.coActivate.filter((peer) => peer !== skillName);
+
   for (const peer of peers) {
     if (!rules.skills?.[peer]) {
       console.warn(`Co-activation peer "${peer}" not found in skill rules`);
     }
   }
+
   return {
     peers,
-    mode: rule.coActivateMode || "any"
+    mode: rule.coActivateMode || 'any',
   };
 }
-function getLoadingMode(skillName, rules) {
+
+export function getLoadingMode(
+  skillName: string,
+  rules: SkillRulesConfig
+): 'lazy' | 'eager' | 'eager-prerequisites' {
   const rule = rules.skills?.[skillName];
   const loading = rule?.loading;
-  if (!loading) return "lazy";
-  if (loading === "lazy" || loading === "eager" || loading === "eager-prerequisites") {
+
+  if (!loading) return 'lazy';
+
+  if (loading === 'lazy' || loading === 'eager' || loading === 'eager-prerequisites') {
     return loading;
   }
+
   console.warn(`Invalid loading mode "${loading}" for skill "${skillName}", defaulting to lazy`);
-  return "lazy";
+  return 'lazy';
 }
-function buildEnhancedLookupResult(match, rules) {
+
+export function buildEnhancedLookupResult(
+  match: SkillRuleMatch,
+  rules: SkillRulesConfig
+): SkillLookupResult {
   const projectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
-  const result = {
+  const result: SkillLookupResult = {
     found: true,
     skillName: match.skillName,
-    skillPath: join(projectDir, ".claude", "skills", match.skillName, "SKILL.md"),
+    skillPath: join(projectDir, '.claude', 'skills', match.skillName, 'SKILL.md'),
     confidence: match.priorityValue / 4,
-    source: match.source
+    source: match.source,
   };
+
   try {
     result.prerequisites = resolvePrerequisites(match.skillName, rules);
   } catch (error) {
@@ -119,15 +166,9 @@ function buildEnhancedLookupResult(match, rules) {
       throw error;
     }
   }
+
   result.coActivation = resolveCoActivation(match.skillName, rules);
   result.loading = getLoadingMode(match.skillName, rules);
+
   return result;
 }
-export {
-  buildEnhancedLookupResult,
-  detectCircularDependency,
-  getLoadingMode,
-  resolveCoActivation,
-  resolvePrerequisites,
-  topologicalSort
-};

@@ -98,6 +98,47 @@ function releaseLock(projectDir: string): void {
   } catch { /* ignore */ }
 }
 
+function hasGlobalTldr(): boolean {
+  const result = spawnSync('tldr', ['--version'], {
+    timeout: 1000,
+    stdio: 'ignore',
+  });
+  if (result.error) {
+    return false;
+  }
+  return result.status === 0;
+}
+
+function probeUnixSocket(socketPath: string): boolean {
+  const script = `
+const net = require('net');
+const socketPath = process.env.SOCKET_PATH;
+const client = net.createConnection(socketPath);
+const timer = setTimeout(() => {
+  client.destroy();
+  process.exit(1);
+}, 200);
+client.on('connect', () => {
+  clearTimeout(timer);
+  client.end();
+  process.exit(0);
+});
+client.on('error', () => {
+  clearTimeout(timer);
+  process.exit(1);
+});
+`;
+  const result = spawnSync(process.execPath, ['-e', script], {
+    env: {
+      ...process.env,
+      SOCKET_PATH: socketPath,
+    },
+    timeout: 500,
+    stdio: 'ignore',
+  });
+  return result.status === 0;
+}
+
 /** Query timeout in milliseconds (3 seconds) */
 const QUERY_TIMEOUT = 3000;
 
@@ -307,38 +348,21 @@ function isDaemonReachable(projectDir: string): boolean {
     // This is more reliable than socket ping which can timeout when busy
     if (isDaemonProcessRunning(projectDir)) {
       // Process exists - socket might just be busy, don't delete it
-      // Try a quick ping but don't delete socket on failure
-      try {
-        execSync(`echo '{"cmd":"ping"}' | nc -U "${connInfo.path}"`, {
-          encoding: 'utf-8',
-          timeout: 1000,  // Increased from 500ms
-          stdio: ['pipe', 'pipe', 'pipe'],
-        });
-        return true;
-      } catch {
-        // Ping failed but process exists - daemon is starting or busy
-        // Return true to prevent spawning duplicates
-        return true;
-      }
+      return true;
     }
 
     // No daemon process running - try ping to verify socket isn't stale
-    try {
-      execSync(`echo '{"cmd":"ping"}' | nc -U "${connInfo.path}"`, {
-        encoding: 'utf-8',
-        timeout: 500,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+    if (probeUnixSocket(connInfo.path!)) {
       return true;
-    } catch {
-      // Connection failed AND no daemon process - socket is stale, safe to remove
-      try {
-        unlinkSync(connInfo.path!);
-      } catch {
-        // Ignore unlink errors
-      }
-      return false;
     }
+
+    // Connection failed AND no daemon process - socket is stale, safe to remove
+    try {
+      unlinkSync(connInfo.path!);
+    } catch {
+      // Ignore unlink errors
+    }
+    return false;
   }
 }
 
@@ -392,6 +416,11 @@ export function tryStartDaemon(projectDir: string): boolean {
           cwd: tldrPath,
         });
         started = result.status === 0;
+      }
+
+      // If no local install and no global binary, skip long polling
+      if (!started && !existsSync(tldrPath) && !hasGlobalTldr()) {
+        return false;
       }
 
       // Fallback to global tldr if local didn't work

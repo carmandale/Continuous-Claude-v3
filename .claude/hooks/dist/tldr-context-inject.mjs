@@ -59,6 +59,45 @@ function releaseLock(projectDir) {
   } catch {
   }
 }
+function hasGlobalTldr() {
+  const result = spawnSync("tldr", ["--version"], {
+    timeout: 1e3,
+    stdio: "ignore"
+  });
+  if (result.error) {
+    return false;
+  }
+  return result.status === 0;
+}
+function probeUnixSocket(socketPath) {
+  const script = `
+const net = require('net');
+const socketPath = process.env.SOCKET_PATH;
+const client = net.createConnection(socketPath);
+const timer = setTimeout(() => {
+  client.destroy();
+  process.exit(1);
+}, 200);
+client.on('connect', () => {
+  clearTimeout(timer);
+  client.end();
+  process.exit(0);
+});
+client.on('error', () => {
+  clearTimeout(timer);
+  process.exit(1);
+});
+`;
+  const result = spawnSync(process.execPath, ["-e", script], {
+    env: {
+      ...process.env,
+      SOCKET_PATH: socketPath
+    },
+    timeout: 500,
+    stdio: "ignore"
+  });
+  return result.status === 0;
+}
 var QUERY_TIMEOUT = 3e3;
 function getConnectionInfo(projectDir) {
   const resolvedPath = resolveProjectDir(projectDir);
@@ -111,32 +150,16 @@ function isDaemonReachable(projectDir) {
       return false;
     }
     if (isDaemonProcessRunning(projectDir)) {
-      try {
-        execSync(`echo '{"cmd":"ping"}' | nc -U "${connInfo.path}"`, {
-          encoding: "utf-8",
-          timeout: 1e3,
-          // Increased from 500ms
-          stdio: ["pipe", "pipe", "pipe"]
-        });
-        return true;
-      } catch {
-        return true;
-      }
+      return true;
+    }
+    if (probeUnixSocket(connInfo.path)) {
+      return true;
     }
     try {
-      execSync(`echo '{"cmd":"ping"}' | nc -U "${connInfo.path}"`, {
-        encoding: "utf-8",
-        timeout: 500,
-        stdio: ["pipe", "pipe", "pipe"]
-      });
-      return true;
+      unlinkSync(connInfo.path);
     } catch {
-      try {
-        unlinkSync(connInfo.path);
-      } catch {
-      }
-      return false;
     }
+    return false;
   }
 }
 function tryStartDaemon(projectDir) {
@@ -169,6 +192,9 @@ function tryStartDaemon(projectDir) {
           cwd: tldrPath
         });
         started = result.status === 0;
+      }
+      if (!started && !existsSync(tldrPath) && !hasGlobalTldr()) {
+        return false;
       }
       if (!started && !process.env.TLDR_DEV) {
         spawnSync("tldr", ["daemon", "start", "--project", projectDir], {
