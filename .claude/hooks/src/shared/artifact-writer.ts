@@ -29,6 +29,7 @@ const FRONTMATTER_KEYS = new Set([
   'outcome',
   'primary_bead',
   'session_id',
+  'agent_id',
   'root_span_id',
   'turn_span_id',
 ]);

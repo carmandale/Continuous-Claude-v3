@@ -31,6 +31,7 @@ All artifacts share these base fields:
   date: string;          // ISO 8601 date or date-time
   session: string;       // Session folder name (bead + slug)
   session_id?: string;
+  agent_id?: string;
 
   goal: string;               // One-liner success criteria
   now: string;                // Current focus (one thing)
@@ -405,6 +406,13 @@ Checkpoint artifacts now use the same unified schema with `mode: checkpoint`.
 - **Implementation**: `.claude/hooks/src/shared/artifact-schema.ts`
 - **Examples**: `thoughts/shared/handoffs/<session>/`
 - **Slash Commands**: `~/.claude/commands/{checkpoint,handoff,finalize}.md`
+
+## Operational Tools
+
+- `uv run python scripts/core/artifact_sweep.py --project /path/to/repo`  
+  Ingest all unified artifacts into Postgres and refresh the SQLite index for Markdown handoffs.
+- `uv run python scripts/core/artifact_health.py --all-projects`  
+  Dashboard of artifact coverage by project, session, and agent (with missing/stale counts).
 
 ## Version History
 

@@ -46,6 +46,10 @@
       "type": "string",
       "description": "Unique session identifier"
     },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent identifier"
+    },
     "root_span_id": {
       "type": "string",
       "description": "Braintrust root span identifier"

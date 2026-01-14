@@ -125,6 +125,7 @@ export interface BaseArtifact {
   outcome: SessionOutcome;
   primary_bead?: string;
   session_id?: string;
+  agent_id?: string;
   root_span_id?: string;
   turn_span_id?: string;
 
@@ -297,6 +298,7 @@ export function createArtifact(
     date?: string;
     primary_bead?: string;
     session_id?: string;
+    agent_id?: string;
     root_span_id?: string;
     turn_span_id?: string;
     metadata?: Record<string, unknown>;
@@ -314,6 +316,7 @@ export function createArtifact(
     outcome,
     primary_bead: options.primary_bead,
     session_id: options.session_id,
+    agent_id: options.agent_id,
     root_span_id: options.root_span_id,
     turn_span_id: options.turn_span_id,
     goal,

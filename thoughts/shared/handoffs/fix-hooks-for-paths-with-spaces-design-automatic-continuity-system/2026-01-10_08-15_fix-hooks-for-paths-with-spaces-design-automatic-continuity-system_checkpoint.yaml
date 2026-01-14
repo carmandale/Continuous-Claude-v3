@@ -1,0 +1,101 @@
+---
+schema_version: 1.0.0
+mode: checkpoint
+date: 2026-01-10T08:15:00.000Z
+session: fix-hooks-for-paths-with-spaces-design-automatic-continuity-system
+session_id: 48228f54
+outcome: PARTIAL_MINUS
+---
+
+goal: Fix hooks for paths with spaces + Design automatic continuity system
+now: Diagnosed hook startup errors - unquoted `$CLAUDE_PROJECT_DIR` with spaces; Fixed `.claude/settings.json` - wrapped all paths in quotes; Built hooks (`npm run build` in `.claude/hooks/`); Updated `create_handoff` skill - made Ledger section MANDATORY; Updated `transcript-parser.ts` - auto-handoffs now include Ledger section; Enabled tracking of `thoughts/` directory (was in .gitignore); Consolidated plans to `thoughts/shared/plans/`; Created comprehensive plan for automatic continuity system; Evaluated Continuous Claude compatibility with pi-agent; Documented skill compatibility issues (frontmatter, naming, collisions)
+done_this_session:
+  - task: Diagnosed hook startup errors - unquoted `$CLAUDE_PROJECT_DIR` with spaces
+    files: []
+  - task: Fixed `.claude/settings.json` - wrapped all paths in quotes
+    files: []
+  - task: Built hooks (`npm run build` in `.claude/hooks/`)
+    files: []
+  - task: Updated `create_handoff` skill - made Ledger section MANDATORY
+    files: []
+  - task: Updated `transcript-parser.ts` - auto-handoffs now include Ledger section
+    files: []
+  - task: Enabled tracking of `thoughts/` directory (was in .gitignore)
+    files: []
+  - task: Consolidated plans to `thoughts/shared/plans/`
+    files: []
+  - task: Created comprehensive plan for automatic continuity system
+    files: []
+  - task: Evaluated Continuous Claude compatibility with pi-agent
+    files: []
+  - task: Documented skill compatibility issues (frontmatter, naming, collisions)
+    files: []
+next:
+  - Implement SessionStart hook changes (load on ALL session types)
+  - Implement SessionEnd comprehensive hook (checkpoint + learnings)
+  - Create background learning extractor
+  - Create checkpoints directory structure
+  - Test end-to-end continuity flow
+  - Fix skill naming (underscores → hyphens) for pi-agent compatibility
+blockers:
+  - Should checkpoints be in `.checkpoint/` or `thoughts/shared/checkpoints/`?
+  - Should we fix skill underscores now or later?
+  - Need `sentence-transformers` installed for local embeddings
+decisions:
+  Decision: Reasoning
+  Checkpoint vs Handoff: Checkpoint = auto-save snapshot; Handoff = intentional transfer. Different purposes.
+  Background learning extraction: Don't block session end; show results at next session start
+  Context >50% triggers checkpoint: Auto-save without prompting; user sees message but isn't blocked
+  Ledger section mandatory: Every handoff must have Ledger for continuity to work
+  Track thoughts/ in git: Plans and handoffs are valuable artifacts, not ephemeral
+worked:
+  - Claude Code hooks use `$CLAUDE_PROJECT_DIR` which fails on paths with spaces (like "Groove Jones")
+  - Memory system is agent-agnostic - PostgreSQL backend works for any agent
+  - "Skills with `user-invocable: false` are internal rules, not user-facing"
+  - Pi-agent reads Claude skills but ignores Claude-specific frontmatter
+files:
+  modified:
+    - File
+    - "`.claude/settings.json`"
+    - "`.claude/hooks/src/transcript-parser.ts`"
+    - "`.claude/skills/create_handoff/SKILL.md`"
+    - "`.gitignore`"
+    - "`thoughts/shared/plans/*.md`"
+metadata:
+  migrated_from: 2026-01-10-0815.md
+  migration_timestamp: 2026-01-14T17:00:49.867Z
+  original_format: checkpoint
+  files_changed:
+    File: Change
+    "`.claude/settings.json`": Fixed - quoted all paths
+    "`.claude/hooks/src/transcript-parser.ts`": Added Ledger section to auto-handoffs
+    "`.claude/skills/create_handoff/SKILL.md`": Made Ledger mandatory
+    "`.gitignore`": Uncommented thoughts/, commented plans/
+    "`thoughts/shared/plans/*.md`": Added continuity plan + pi-agent evaluation
+  resume_prompt: |-
+    ---
+    Continue working on: Automatic Continuity System for Continuous Claude
+
+    Context:
+    - This is a fork of Continuous-Claude-v3, designed for Claude Code
+    - Currently running in pi-agent, evaluating compatibility
+    - The "50 First Dates" problem: agents lose memory between sessions
+    - Plan exists at `thoughts/shared/plans/2026-01-10-automatic-continuity-system.md`
+
+    Current state:
+    - Hooks fixed for paths with spaces ✅
+    - Plan created and refined ✅
+    - Evaluation of pi-agent compatibility complete ✅
+    - Ready to implement automatic continuity
+
+    Next steps:
+    1. Update SessionStart hook to load continuity on ALL session types (including startup)
+    2. Create SessionEnd comprehensive hook (checkpoint at >50%, background learnings)
+    3. Test the end-to-end flow
+
+    Key decisions already made:
+    - Checkpoints are lightweight auto-saves (>50% context)
+    - Handoffs are intentional transfers (/create_handoff)
+    - Learning extraction runs in background, results shown next session
+    - Ledger section is mandatory in all handoffs
+    ---

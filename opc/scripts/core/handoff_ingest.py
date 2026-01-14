@@ -44,6 +44,7 @@ def get_postgres_url() -> str | None:
 
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n(.*)$", re.DOTALL)
+_VALID_OUTCOMES = {"SUCCEEDED", "PARTIAL_PLUS", "PARTIAL_MINUS", "FAILED"}
 
 
 def split_frontmatter(content: str) -> tuple[dict[str, str], str]:
@@ -243,6 +244,9 @@ def main() -> int:
         return 2
 
     outcome = front.get("outcome") or front.get("status")
+    if outcome:
+        normalized = outcome.upper()
+        outcome = normalized if normalized in _VALID_OUTCOMES else None
     root_span_id = front.get("root_span_id") or None
 
     goal = front.get("goal") or extract_scalar(body, "goal")
@@ -261,7 +265,7 @@ def main() -> int:
         file_path=str(p.resolve()),
         fmt=fmt,
         session_id=args.session_id or front.get("session_id"),
-        agent_id=args.agent_id,
+        agent_id=args.agent_id or front.get("agent_id"),
         root_span_id=root_span_id,
         goal=goal,
         what_worked=what_worked,

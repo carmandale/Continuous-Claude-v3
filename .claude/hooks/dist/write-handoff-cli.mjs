@@ -141,6 +141,7 @@ var FRONTMATTER_KEYS = /* @__PURE__ */ new Set([
   "outcome",
   "primary_bead",
   "session_id",
+  "agent_id",
   "root_span_id",
   "turn_span_id"
 ]);
@@ -255,6 +256,7 @@ function createArtifact(mode, goal, now, outcome, options) {
     outcome,
     primary_bead: options.primary_bead,
     session_id: options.session_id,
+    agent_id: options.agent_id,
     root_span_id: options.root_span_id,
     turn_span_id: options.turn_span_id,
     goal,

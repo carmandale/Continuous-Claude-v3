@@ -11,6 +11,7 @@ Options:
   --primary-bead <id>     Alias for --bead
   --session-name <name>   Optional full session name (bead + slug)
   --session-title <name>  Optional short human title (used to build session)
+  --agent-id <id>         Optional agent identifier (defaults from env)
   --goal <text>           Optional goal (if omitted, placeholder is inserted)
   --now <text>            Optional current focus (if omitted, placeholder is inserted)
   --outcome <value>       Optional outcome (SUCCEEDED|PARTIAL_PLUS|PARTIAL_MINUS|FAILED)
@@ -32,6 +33,7 @@ MODE=""
 PRIMARY_BEAD=""
 SESSION_NAME=""
 SESSION_TITLE=""
+AGENT_ID_VALUE=""
 GOAL=""
 NOW=""
 OUTCOME=""
@@ -49,6 +51,8 @@ while [[ $# -gt 0 ]]; do
       SESSION_NAME="${2:-}"; shift 2 ;;
     --session-title|--session_title)
       SESSION_TITLE="${2:-}"; shift 2 ;;
+    --agent-id|--agent_id)
+      AGENT_ID_VALUE="${2:-}"; shift 2 ;;
     --goal)
       GOAL="${2:-}"; shift 2 ;;
     --now)
@@ -86,6 +90,16 @@ case "$MODE" in
     exit 1
     ;;
  esac
+
+if [[ -z "$AGENT_ID_VALUE" ]]; then
+  for var in AGENT_ID CLAUDE_AGENT_ID CODEX_AGENT_ID OPENCODE_AGENT_ID PI_AGENT_ID; do
+    value="${!var:-}"
+    if [[ -n "$value" ]]; then
+      AGENT_ID_VALUE="$value"
+      break
+    fi
+  done
+fi
 
 if [[ "$MODE" == "handoff" || "$MODE" == "finalize" ]]; then
   if [[ -z "$PRIMARY_BEAD" ]]; then
@@ -176,6 +190,9 @@ CONTENT+="session: $(yaml_quote "$SESSION_NAME")\n"
 CONTENT+="outcome: $(yaml_quote "$OUTCOME_VALUE")\n"
 if [[ -n "$PRIMARY_BEAD" ]]; then
   CONTENT+="primary_bead: $(yaml_quote "$PRIMARY_BEAD")\n"
+fi
+if [[ -n "$AGENT_ID_VALUE" ]]; then
+  CONTENT+="agent_id: $(yaml_quote "$AGENT_ID_VALUE")\n"
 fi
 CONTENT+="---\n\n"
 CONTENT+="goal: $(yaml_quote "$GOAL_VALUE")\n"
