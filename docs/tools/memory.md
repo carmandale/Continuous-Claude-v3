@@ -324,6 +324,11 @@ Query memory when:
 - Looking for patterns or approaches that worked previously
 - Debugging similar issues
 
+### Project Scoping
+
+By default, memories are scoped to the current project (based on `CLAUDE_PROJECT_DIR`).
+To search across all projects, pass `--all-projects` to the recall command.
+
 ### Example Workflow
 
 ```bash

@@ -75,8 +75,23 @@ def get_backend() -> str:
     # Default to sqlite for simplicity
     return "sqlite"
 
+def resolve_project_filter(project: str | None, all_projects: bool) -> str | None:
+    """Resolve project filter from args/environment (None = all projects)."""
+    if all_projects:
+        return None
+    if project:
+        return str(Path(project).resolve())
+    env_project = os.environ.get("CLAUDE_PROJECT_DIR")
+    if env_project:
+        return str(Path(env_project).resolve())
+    return None
 
-async def search_learnings_text_only_postgres(query: str, k: int = 5) -> list[dict[str, Any]]:
+
+async def search_learnings_text_only_postgres(
+    query: str,
+    k: int = 5,
+    project: str | None = None,
+) -> list[dict[str, Any]]:
     """Fast text-only search for PostgreSQL using full-text search.
 
     Uses tsvector/tsquery with GIN index. Automatic stopword handling.
@@ -102,29 +117,7 @@ async def search_learnings_text_only_postgres(query: str, k: int = 5) -> list[di
             words = clean_query.split()[:1] or [query.split()[0]]
         or_query = ' | '.join(words)
 
-        rows = await conn.fetch(
-            """
-            SELECT
-                id,
-                session_id,
-                content,
-                metadata,
-                created_at,
-                ts_rank(to_tsvector('english', content), to_tsquery('english', $1)) as similarity
-            FROM archival_memory
-            WHERE metadata->>'type' = 'session_learning'
-                AND to_tsvector('english', content) @@ to_tsquery('english', $1)
-            ORDER BY similarity DESC, created_at DESC
-            LIMIT $2
-            """,
-            or_query,
-            k,
-        )
-
-        # Fallback to ILIKE if no FTS results (query was all stopwords)
-        if not rows:
-            # Extract first word for simple substring match
-            first_word = query.split()[0] if query.split() else query
+        if project:
             rows = await conn.fetch(
                 """
                 SELECT
@@ -133,16 +126,82 @@ async def search_learnings_text_only_postgres(query: str, k: int = 5) -> list[di
                     content,
                     metadata,
                     created_at,
-                    0.1 as similarity
+                    ts_rank(to_tsvector('english', content), to_tsquery('english', $1)) as similarity
                 FROM archival_memory
                 WHERE metadata->>'type' = 'session_learning'
-                    AND content ILIKE '%' || $1 || '%'
-                ORDER BY created_at DESC
-                LIMIT $2
+                    AND metadata->>'project' = $2
+                    AND to_tsvector('english', content) @@ to_tsquery('english', $1)
+                ORDER BY similarity DESC, created_at DESC
+                LIMIT $3
                 """,
-                first_word,
+                or_query,
+                project,
                 k,
             )
+        else:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    id,
+                    session_id,
+                    content,
+                    metadata,
+                    created_at,
+                    ts_rank(to_tsvector('english', content), to_tsquery('english', $1)) as similarity
+                FROM archival_memory
+                WHERE metadata->>'type' = 'session_learning'
+                    AND to_tsvector('english', content) @@ to_tsquery('english', $1)
+                ORDER BY similarity DESC, created_at DESC
+                LIMIT $2
+                """,
+                or_query,
+                k,
+            )
+
+        # Fallback to ILIKE if no FTS results (query was all stopwords)
+        if not rows:
+            # Extract first word for simple substring match
+            first_word = query.split()[0] if query.split() else query
+            if project:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        id,
+                        session_id,
+                        content,
+                        metadata,
+                        created_at,
+                        0.1 as similarity
+                    FROM archival_memory
+                    WHERE metadata->>'type' = 'session_learning'
+                        AND metadata->>'project' = $2
+                        AND content ILIKE '%' || $1 || '%'
+                    ORDER BY created_at DESC
+                    LIMIT $3
+                    """,
+                    first_word,
+                    project,
+                    k,
+                )
+            else:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        id,
+                        session_id,
+                        content,
+                        metadata,
+                        created_at,
+                        0.1 as similarity
+                    FROM archival_memory
+                    WHERE metadata->>'type' = 'session_learning'
+                        AND content ILIKE '%' || $1 || '%'
+                    ORDER BY created_at DESC
+                    LIMIT $2
+                    """,
+                    first_word,
+                    k,
+                )
 
     results = []
     for row in rows:
@@ -162,7 +221,11 @@ async def search_learnings_text_only_postgres(query: str, k: int = 5) -> list[di
     return results
 
 
-async def search_learnings_sqlite(query: str, k: int = 5) -> list[dict[str, Any]]:
+async def search_learnings_sqlite(
+    query: str,
+    k: int = 5,
+    project: str | None = None,
+) -> list[dict[str, Any]]:
     """Search learnings using SQLite FTS5 (BM25 ranking).
 
     Cross-session search - finds learnings from ALL sessions.
@@ -191,6 +254,7 @@ async def search_learnings_sqlite(query: str, k: int = 5) -> list[dict[str, Any]
     conn.row_factory = sqlite3.Row
 
     try:
+        fetch_limit = k * 5 if project else k
         cursor = conn.execute(
             """
             SELECT
@@ -206,7 +270,7 @@ async def search_learnings_sqlite(query: str, k: int = 5) -> list[dict[str, Any]
             ORDER BY rank
             LIMIT ?
             """,
-            (fts_query, k),
+            (fts_query, fetch_limit),
         )
         rows = cursor.fetchall()
 
@@ -224,6 +288,10 @@ async def search_learnings_sqlite(query: str, k: int = 5) -> list[dict[str, Any]
                 except json.JSONDecodeError:
                     pass
 
+            if project:
+                if metadata.get("project") != project:
+                    continue
+
             results.append({
                 "id": row["id"] or "",
                 "session_id": row["session_id"] or "unknown",
@@ -232,6 +300,8 @@ async def search_learnings_sqlite(query: str, k: int = 5) -> list[dict[str, Any]
                 "created_at": datetime.fromtimestamp(row["created_at"]) if row["created_at"] else None,
                 "similarity": normalized_score,
             })
+            if len(results) >= k:
+                break
 
         return results
     finally:
@@ -244,6 +314,7 @@ async def search_learnings_hybrid_rrf(
     provider: str = "local",
     rrf_k: int = 60,
     similarity_threshold: float = 0.0,
+    project: str | None = None,
 ) -> list[dict[str, Any]]:
     """Hybrid RRF search combining text and vector rankings.
 
@@ -276,58 +347,115 @@ async def search_learnings_hybrid_rrf(
         await init_pgvector(conn)
 
         # RRF query across all sessions for learnings
-        rows = await conn.fetch(
-            """
-            WITH fts_ranked AS (
+        if project:
+            rows = await conn.fetch(
+                """
+                WITH fts_ranked AS (
+                    SELECT
+                        id,
+                        ROW_NUMBER() OVER (
+                            ORDER BY ts_rank(
+                                to_tsvector('english', content),
+                                plainto_tsquery('english', $1)
+                            ) DESC
+                        ) as fts_rank
+                    FROM archival_memory
+                    WHERE metadata->>'type' = 'session_learning'
+                    AND metadata->>'project' = $2
+                    AND to_tsvector('english', content) @@ plainto_tsquery('english', $1)
+                ),
+                vector_ranked AS (
+                    SELECT
+                        id,
+                        ROW_NUMBER() OVER (ORDER BY embedding <=> $3::vector) as vec_rank
+                    FROM archival_memory
+                    WHERE metadata->>'type' = 'session_learning'
+                    AND metadata->>'project' = $2
+                    AND embedding IS NOT NULL
+                ),
+                combined AS (
+                    SELECT
+                        COALESCE(f.id, v.id) as id,
+                        COALESCE(1.0 / ($4 + f.fts_rank), 0) +
+                        COALESCE(1.0 / ($4 + v.vec_rank), 0) as rrf_score,
+                        f.fts_rank,
+                        v.vec_rank
+                    FROM fts_ranked f
+                    FULL OUTER JOIN vector_ranked v ON f.id = v.id
+                )
                 SELECT
-                    id,
-                    ROW_NUMBER() OVER (
-                        ORDER BY ts_rank(
-                            to_tsvector('english', content),
-                            plainto_tsquery('english', $1)
-                        ) DESC
-                    ) as fts_rank
-                FROM archival_memory
-                WHERE metadata->>'type' = 'session_learning'
-                AND to_tsvector('english', content) @@ plainto_tsquery('english', $1)
-            ),
-            vector_ranked AS (
-                SELECT
-                    id,
-                    ROW_NUMBER() OVER (ORDER BY embedding <=> $2::vector) as vec_rank
-                FROM archival_memory
-                WHERE metadata->>'type' = 'session_learning'
-                AND embedding IS NOT NULL
-            ),
-            combined AS (
-                SELECT
-                    COALESCE(f.id, v.id) as id,
-                    COALESCE(1.0 / ($3 + f.fts_rank), 0) +
-                    COALESCE(1.0 / ($3 + v.vec_rank), 0) as rrf_score,
-                    f.fts_rank,
-                    v.vec_rank
-                FROM fts_ranked f
-                FULL OUTER JOIN vector_ranked v ON f.id = v.id
+                    a.id,
+                    a.session_id,
+                    a.content,
+                    a.metadata,
+                    a.created_at,
+                    c.rrf_score,
+                    c.fts_rank,
+                    c.vec_rank
+                FROM combined c
+                JOIN archival_memory a ON a.id = c.id
+                ORDER BY c.rrf_score DESC
+                LIMIT $5
+                """,
+                query,
+                project,
+                str(query_embedding),
+                rrf_k,
+                k * 2,  # Fetch more to allow filtering
             )
-            SELECT
-                a.id,
-                a.session_id,
-                a.content,
-                a.metadata,
-                a.created_at,
-                c.rrf_score,
-                c.fts_rank,
-                c.vec_rank
-            FROM combined c
-            JOIN archival_memory a ON a.id = c.id
-            ORDER BY c.rrf_score DESC
-            LIMIT $4
-            """,
-            query,
-            str(query_embedding),
-            rrf_k,
-            k * 2,  # Fetch more to allow filtering
-        )
+        else:
+            rows = await conn.fetch(
+                """
+                WITH fts_ranked AS (
+                    SELECT
+                        id,
+                        ROW_NUMBER() OVER (
+                            ORDER BY ts_rank(
+                                to_tsvector('english', content),
+                                plainto_tsquery('english', $1)
+                            ) DESC
+                        ) as fts_rank
+                    FROM archival_memory
+                    WHERE metadata->>'type' = 'session_learning'
+                    AND to_tsvector('english', content) @@ plainto_tsquery('english', $1)
+                ),
+                vector_ranked AS (
+                    SELECT
+                        id,
+                        ROW_NUMBER() OVER (ORDER BY embedding <=> $2::vector) as vec_rank
+                    FROM archival_memory
+                    WHERE metadata->>'type' = 'session_learning'
+                    AND embedding IS NOT NULL
+                ),
+                combined AS (
+                    SELECT
+                        COALESCE(f.id, v.id) as id,
+                        COALESCE(1.0 / ($3 + f.fts_rank), 0) +
+                        COALESCE(1.0 / ($3 + v.vec_rank), 0) as rrf_score,
+                        f.fts_rank,
+                        v.vec_rank
+                    FROM fts_ranked f
+                    FULL OUTER JOIN vector_ranked v ON f.id = v.id
+                )
+                SELECT
+                    a.id,
+                    a.session_id,
+                    a.content,
+                    a.metadata,
+                    a.created_at,
+                    c.rrf_score,
+                    c.fts_rank,
+                    c.vec_rank
+                FROM combined c
+                JOIN archival_memory a ON a.id = c.id
+                ORDER BY c.rrf_score DESC
+                LIMIT $4
+                """,
+                query,
+                str(query_embedding),
+                rrf_k,
+                k * 2,  # Fetch more to allow filtering
+            )
 
     results = []
     for row in rows:
@@ -364,6 +492,7 @@ async def search_learnings_postgres(
     text_fallback: bool = True,
     similarity_threshold: float = 0.0,
     recency_weight: float = 0.0,
+    project: str | None = None,
 ) -> list[dict[str, Any]]:
     """Search learnings using PostgreSQL (vector similarity or text fallback).
 
@@ -385,13 +514,24 @@ async def search_learnings_postgres(
 
     # First check if any learnings have embeddings
     async with pool.acquire() as conn:
-        count_row = await conn.fetchrow(
-            """
-            SELECT COUNT(*) as cnt FROM archival_memory
-            WHERE metadata->>'type' = 'session_learning'
-                AND embedding IS NOT NULL
-            """
-        )
+        if project:
+            count_row = await conn.fetchrow(
+                """
+                SELECT COUNT(*) as cnt FROM archival_memory
+                WHERE metadata->>'type' = 'session_learning'
+                    AND metadata->>'project' = $1
+                    AND embedding IS NOT NULL
+                """,
+                project,
+            )
+        else:
+            count_row = await conn.fetchrow(
+                """
+                SELECT COUNT(*) as cnt FROM archival_memory
+                WHERE metadata->>'type' = 'session_learning'
+                    AND embedding IS NOT NULL
+                """
+            )
         has_embeddings = count_row["cnt"] > 0
 
     if has_embeddings:
@@ -409,31 +549,126 @@ async def search_learnings_postgres(
             if recency_weight > 0:
                 # Combined score: (1-recency_weight)*similarity + recency_weight*recency
                 # Recency is normalized: 1.0 for newest, 0.0 for 30 days old or older
-                rows = await conn.fetch(
-                    """
-                    WITH scored AS (
+                if project:
+                    rows = await conn.fetch(
+                        """
+                        WITH scored AS (
+                            SELECT
+                                id,
+                                session_id,
+                                content,
+                                metadata,
+                                created_at,
+                                1 - (embedding <=> $1::vector) as similarity,
+                                GREATEST(0, 1.0 - EXTRACT(EPOCH FROM NOW() - created_at) / (30 * 86400)) as recency
+                            FROM archival_memory
+                            WHERE metadata->>'type' = 'session_learning'
+                                AND metadata->>'project' = $2
+                                AND embedding IS NOT NULL
+                        )
+                        SELECT
+                            id, session_id, content, metadata, created_at, similarity, recency,
+                            (1.0 - $4::float) * similarity + $4::float * recency as combined_score
+                        FROM scored
+                        ORDER BY combined_score DESC
+                        LIMIT $3
+                        """,
+                        str(query_embedding),
+                        project,
+                        k,
+                        recency_weight,
+                    )
+                else:
+                    rows = await conn.fetch(
+                        """
+                        WITH scored AS (
+                            SELECT
+                                id,
+                                session_id,
+                                content,
+                                metadata,
+                                created_at,
+                                1 - (embedding <=> $1::vector) as similarity,
+                                GREATEST(0, 1.0 - EXTRACT(EPOCH FROM NOW() - created_at) / (30 * 86400)) as recency
+                            FROM archival_memory
+                            WHERE metadata->>'type' = 'session_learning'
+                                AND embedding IS NOT NULL
+                        )
+                        SELECT
+                            id, session_id, content, metadata, created_at, similarity, recency,
+                            (1.0 - $3::float) * similarity + $3::float * recency as combined_score
+                        FROM scored
+                        ORDER BY combined_score DESC
+                        LIMIT $2
+                        """,
+                        str(query_embedding),
+                        k,
+                        recency_weight,
+                    )
+            else:
+                if project:
+                    rows = await conn.fetch(
+                        """
                         SELECT
                             id,
                             session_id,
                             content,
                             metadata,
                             created_at,
-                            1 - (embedding <=> $1::vector) as similarity,
-                            GREATEST(0, 1.0 - EXTRACT(EPOCH FROM NOW() - created_at) / (30 * 86400)) as recency
+                            1 - (embedding <=> $1::vector) as similarity
+                        FROM archival_memory
+                        WHERE metadata->>'type' = 'session_learning'
+                            AND metadata->>'project' = $2
+                            AND embedding IS NOT NULL
+                        ORDER BY embedding <=> $1::vector
+                        LIMIT $3
+                        """,
+                        str(query_embedding),
+                        project,
+                        k,
+                    )
+                else:
+                    rows = await conn.fetch(
+                        """
+                        SELECT
+                            id,
+                            session_id,
+                            content,
+                            metadata,
+                            created_at,
+                            1 - (embedding <=> $1::vector) as similarity
                         FROM archival_memory
                         WHERE metadata->>'type' = 'session_learning'
                             AND embedding IS NOT NULL
+                        ORDER BY embedding <=> $1::vector
+                        LIMIT $2
+                        """,
+                        str(query_embedding),
+                        k,
                     )
+    elif text_fallback:
+        # Fallback to text search (ILIKE) when no embeddings
+        async with pool.acquire() as conn:
+            if project:
+                rows = await conn.fetch(
+                    """
                     SELECT
-                        id, session_id, content, metadata, created_at, similarity, recency,
-                        (1.0 - $3::float) * similarity + $3::float * recency as combined_score
-                    FROM scored
-                    ORDER BY combined_score DESC
-                    LIMIT $2
+                        id,
+                        session_id,
+                        content,
+                        metadata,
+                        created_at,
+                        0.5 as similarity
+                    FROM archival_memory
+                    WHERE metadata->>'type' = 'session_learning'
+                        AND metadata->>'project' = $2
+                        AND content ILIKE '%' || $1 || '%'
+                    ORDER BY created_at DESC
+                    LIMIT $3
                     """,
-                    str(query_embedding),
+                    query,
+                    project,
                     k,
-                    recency_weight,
                 )
             else:
                 rows = await conn.fetch(
@@ -444,37 +679,16 @@ async def search_learnings_postgres(
                         content,
                         metadata,
                         created_at,
-                        1 - (embedding <=> $1::vector) as similarity
+                        0.5 as similarity
                     FROM archival_memory
                     WHERE metadata->>'type' = 'session_learning'
-                        AND embedding IS NOT NULL
-                    ORDER BY embedding <=> $1::vector
+                        AND content ILIKE '%' || $1 || '%'
+                    ORDER BY created_at DESC
                     LIMIT $2
                     """,
-                    str(query_embedding),
+                    query,
                     k,
                 )
-    elif text_fallback:
-        # Fallback to text search (ILIKE) when no embeddings
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT
-                    id,
-                    session_id,
-                    content,
-                    metadata,
-                    created_at,
-                    0.5 as similarity
-                FROM archival_memory
-                WHERE metadata->>'type' = 'session_learning'
-                    AND content ILIKE '%' || $1 || '%'
-                ORDER BY created_at DESC
-                LIMIT $2
-                """,
-                query,
-                k,
-            )
     else:
         return []
 
@@ -522,6 +736,7 @@ async def search_learnings(
     text_fallback: bool = True,
     similarity_threshold: float = 0.2,
     recency_weight: float = 0.0,
+    project: str | None = None,
 ) -> list[dict[str, Any]]:
     """Search archival_memory for session learnings.
 
@@ -544,9 +759,17 @@ async def search_learnings(
     backend = get_backend()
 
     if backend == "sqlite":
-        return await search_learnings_sqlite(query, k)
+        return await search_learnings_sqlite(query, k, project)
     else:
-        return await search_learnings_postgres(query, k, provider, text_fallback, similarity_threshold, recency_weight)
+        return await search_learnings_postgres(
+            query,
+            k,
+            provider,
+            text_fallback,
+            similarity_threshold,
+            recency_weight,
+            project,
+        )
 
 
 async def main() -> int:
@@ -603,13 +826,24 @@ async def main() -> int:
         default=0.1,
         help="Recency weight for vector-only mode (0.0-1.0, default: 0.1)",
     )
+    parser.add_argument(
+        "--project",
+        help="Project root to filter by (default: CLAUDE_PROJECT_DIR)",
+    )
+    parser.add_argument(
+        "--all-projects",
+        action="store_true",
+        help="Search across all projects (disable project filter)",
+    )
 
     args = parser.parse_args()
+    project_filter = resolve_project_filter(args.project, args.all_projects)
 
     # JSON mode: suppress human-readable output
     if not args.json:
         print(f'Recalling learnings for: "{args.query}"')
         print(f"Provider: {args.provider}")
+        print(f"Project: {project_filter or 'ALL'}")
         print()
 
     try:
@@ -619,10 +853,10 @@ async def main() -> int:
             # SQLite only supports text search (no pgvector)
             if not args.text_only and not args.json:
                 print("  (SQLite backend - using text search)")
-            results = await search_learnings_sqlite(args.query, args.k)
+            results = await search_learnings_sqlite(args.query, args.k, project_filter)
         elif args.text_only:
             # Fast text-only search (no embeddings)
-            results = await search_learnings_text_only_postgres(args.query, args.k)
+            results = await search_learnings_text_only_postgres(args.query, args.k, project_filter)
         elif args.vector_only:
             # Vector-only search with recency boost
             results = await search_learnings(
@@ -631,6 +865,7 @@ async def main() -> int:
                 provider=args.provider,
                 similarity_threshold=args.threshold,
                 recency_weight=args.recency,
+                project=project_filter,
             )
         else:
             # Default: Hybrid RRF search (text + vector combined)
@@ -639,6 +874,7 @@ async def main() -> int:
                 k=args.k,
                 provider=args.provider,
                 similarity_threshold=args.threshold * 0.01,  # RRF scores are ~0.01-0.03 range
+                project=project_filter,
             )
     except Exception as e:
         if args.json:

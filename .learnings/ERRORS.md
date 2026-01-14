@@ -32,6 +32,34 @@ Invoke via absolute path (`~/.claude/scripts/cc-artifact`) or add that directory
 - **Notes**: Updated `cc-artifact` to detect and use python3/python.
 
 ---
+## [ERR-20260114-004] docker-exec-tty-flag
+
+**Logged**: 2026-01-14T15:05:24Z
+**Priority**: low
+**Status**: pending
+**Area**: infra
+
+### Summary
+Used `docker exec -T` (invalid flag) which failed; `-T` is for `docker compose exec`.
+
+### Error
+```
+unknown shorthand flag: 'T' in -T
+```
+
+### Context
+- Command: `docker exec -T continuous-claude-postgres psql -U claude -d continuous_claude -c "SELECT COUNT(*) FROM archival_memory;"`
+- Environment: Docker CLI
+
+### Suggested Fix
+Use `docker exec -i` (no TTY) or `docker compose exec -T`.
+
+### Metadata
+- Reproducible: yes
+- Related Files: N/A
+- Source: error
+
+---
 ## [ERR-20260114-003] agentmail-macro-start-session
 
 **Logged**: 2026-01-14T12:03:02Z

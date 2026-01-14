@@ -57,6 +57,14 @@ load_dotenv()
 project_dir = os.environ.get("CLAUDE_PROJECT_DIR", str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, project_dir)
 
+
+def get_project_id() -> str | None:
+    """Return the current project root for scoping, if available."""
+    project = os.environ.get("CLAUDE_PROJECT_DIR")
+    if not project:
+        return None
+    return str(Path(project).resolve())
+
 # Valid learning types for --type parameter
 LEARNING_TYPES = [
     "FAILED_APPROACH",
@@ -148,6 +156,9 @@ async def store_learning_v2(
             "session_id": session_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+        project_id = get_project_id()
+        if project_id:
+            metadata["project"] = project_id
 
         if learning_type:
             metadata["learning_type"] = learning_type
@@ -235,6 +246,9 @@ async def store_learning(
             "patterns": bool(patterns and patterns.lower() != "none"),
         }
     }
+    project_id = get_project_id()
+    if project_id:
+        metadata["project"] = project_id
 
     # Get backend - prefer postgres if DATABASE_URL is set
     if os.environ.get("DATABASE_URL"):
