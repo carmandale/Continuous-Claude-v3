@@ -140,6 +140,7 @@ export interface BaseArtifact {
   timestamp: string;  // ISO 8601
   session_id?: string;
   session_name?: string;
+  primary_bead?: string;  // Optional for checkpoint, required for handoff/finalize
 
   // Core content
   goal: string;
@@ -310,6 +311,13 @@ export function createArtifact(
   };
 
   if (eventType === 'checkpoint') {
+    // Checkpoint can optionally include primary_bead
+    if (options?.primary_bead) {
+      return {
+        ...base,
+        primary_bead: options.primary_bead,
+      } as CheckpointArtifact & { primary_bead?: string };
+    }
     return base as CheckpointArtifact;
   }
 

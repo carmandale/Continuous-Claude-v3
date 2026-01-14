@@ -5,7 +5,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "esbuild src/*.ts --bundle --platform=node --format=esm --outdir=dist --out-extension:.js=.mjs --external:better-sqlite3 --external:ajv --external:ajv-formats",
+        "build": "esbuild src/*.ts --bundle --platform=node --format=esm --outdir=dist --out-extension:.js=.mjs --external:better-sqlite3 --external:ajv --external:ajv-formats --external:yaml && cp src/shared/artifact-schema.json dist/",
         "check": "tsc --noEmit",
         "dev": "npm run build && npm run check",
         "test": "vitest run --reporter=verbose",

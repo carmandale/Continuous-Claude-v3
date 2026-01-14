@@ -226,7 +226,7 @@ function createArtifact(eventType, goal, now, outcome, options) {
   throw new Error(`Unknown event type: ${eventType}`);
 }
 
-// src/write-checkpoint-cli.ts
+// src/write-finalize-cli.ts
 function parseArgs() {
   const args = process.argv.slice(2);
   const parsed = {};
@@ -249,20 +249,20 @@ function parseArgs() {
       }
     }
   }
-  if (!parsed.goal || !parsed.now || !parsed.outcome) {
+  if (!parsed.goal || !parsed.now || !parsed.outcome || !parsed.primary_bead) {
     console.error("Error: Missing required arguments");
-    console.error("Required: --goal, --now, --outcome");
+    console.error("Required: --goal, --now, --outcome, --primary_bead");
     console.error("");
     console.error("Usage:");
-    console.error("  node write-checkpoint-cli.js \\");
+    console.error("  node write-finalize-cli.js \\");
     console.error('    --goal "Goal description" \\');
-    console.error('    --now "Current focus" \\');
-    console.error("    --outcome PARTIAL_PLUS \\");
-    console.error("    [--primary_bead beads-xxx] \\");
+    console.error('    --now "Final status" \\');
+    console.error("    --outcome SUCCEEDED \\");
+    console.error("    --primary_bead beads-xxx \\");
     console.error("    [--session_id abc123] \\");
     console.error('    [--test "pytest tests/"] \\');
-    console.error('    [--next "First step"] \\');
-    console.error('    [--blockers "Blocker 1"]');
+    console.error(`    [--final_solutions '[{"problem":"...","solution":"..."}]'] \\`);
+    console.error(`    [--final_decisions '[{"decision":"...","rationale":"..."}]']`);
     process.exit(1);
   }
   return parsed;
@@ -271,13 +271,12 @@ async function main() {
   try {
     const args = parseArgs();
     const artifact = createArtifact(
-      "checkpoint",
+      "finalize",
       args.goal,
       args.now,
       args.outcome,
       {
         primary_bead: args.primary_bead,
-        // Optional for checkpoint
         session_id: args.session_id,
         session_name: args.session_name
       }
@@ -303,6 +302,15 @@ async function main() {
     }
     if (args.files) {
       artifact.files = JSON.parse(args.files);
+    }
+    if (args.final_solutions) {
+      artifact.final_solutions = JSON.parse(args.final_solutions);
+    }
+    if (args.final_decisions) {
+      artifact.final_decisions = JSON.parse(args.final_decisions);
+    }
+    if (args.artifacts_produced) {
+      artifact.artifacts_produced = JSON.parse(args.artifacts_produced);
     }
     const filePath = await writeArtifact(artifact);
     console.log(JSON.stringify({

@@ -226,7 +226,7 @@ function createArtifact(eventType, goal, now, outcome, options) {
   throw new Error(`Unknown event type: ${eventType}`);
 }
 
-// src/write-checkpoint-cli.ts
+// src/write-handoff-cli.ts
 function parseArgs() {
   const args = process.argv.slice(2);
   const parsed = {};
@@ -235,7 +235,7 @@ function parseArgs() {
     const value = args[i + 1];
     if (arg.startsWith("--")) {
       const key = arg.slice(2);
-      if (key === "next" || key === "blockers" || key === "questions") {
+      if (key === "next" || key === "blockers" || key === "questions" || key === "related_beads") {
         if (!parsed[key]) {
           parsed[key] = [];
         }
@@ -249,16 +249,16 @@ function parseArgs() {
       }
     }
   }
-  if (!parsed.goal || !parsed.now || !parsed.outcome) {
+  if (!parsed.goal || !parsed.now || !parsed.outcome || !parsed.primary_bead) {
     console.error("Error: Missing required arguments");
-    console.error("Required: --goal, --now, --outcome");
+    console.error("Required: --goal, --now, --outcome, --primary_bead");
     console.error("");
     console.error("Usage:");
-    console.error("  node write-checkpoint-cli.js \\");
+    console.error("  node write-handoff-cli.js \\");
     console.error('    --goal "Goal description" \\');
-    console.error('    --now "Current focus" \\');
-    console.error("    --outcome PARTIAL_PLUS \\");
-    console.error("    [--primary_bead beads-xxx] \\");
+    console.error('    --now "Next steps" \\');
+    console.error("    --outcome SUCCEEDED \\");
+    console.error("    --primary_bead beads-xxx \\");
     console.error("    [--session_id abc123] \\");
     console.error('    [--test "pytest tests/"] \\');
     console.error('    [--next "First step"] \\');
@@ -271,13 +271,12 @@ async function main() {
   try {
     const args = parseArgs();
     const artifact = createArtifact(
-      "checkpoint",
+      "handoff",
       args.goal,
       args.now,
       args.outcome,
       {
         primary_bead: args.primary_bead,
-        // Optional for checkpoint
         session_id: args.session_id,
         session_name: args.session_name
       }
@@ -286,6 +285,8 @@ async function main() {
     if (args.next) artifact.next = args.next;
     if (args.blockers) artifact.blockers = args.blockers;
     if (args.questions) artifact.questions = args.questions;
+    if (args.related_beads) artifact.related_beads = args.related_beads;
+    if (args.continuation_prompt) artifact.continuation_prompt = args.continuation_prompt;
     if (args.this_session) {
       artifact.this_session = JSON.parse(args.this_session);
     }
@@ -303,6 +304,9 @@ async function main() {
     }
     if (args.files) {
       artifact.files = JSON.parse(args.files);
+    }
+    if (args.files_to_review) {
+      artifact.files_to_review = JSON.parse(args.files_to_review);
     }
     const filePath = await writeArtifact(artifact);
     console.log(JSON.stringify({
