@@ -10,8 +10,7 @@
  * - Tests: __tests__/artifact-validator.test.ts
  */
 
-import Ajv from 'ajv';
-import type { ValidateFunction, ErrorObject } from 'ajv';
+import Ajv, { type ValidateFunction, type ErrorObject } from 'ajv';
 import addFormats from 'ajv-formats';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
