@@ -161,3 +161,32 @@ export type {
   MemoryClientOptions,
   UsageRecord,
 } from './memory-client.js';
+
+// Artifact schema
+export {
+  ARTIFACT_SCHEMA_VERSION,
+  isCheckpoint,
+  isHandoff,
+  isFinalize,
+  requiresBead,
+  validateArtifact,
+  createArtifact,
+} from './artifact-schema.js';
+
+export type {
+  ArtifactEventType,
+  SessionOutcome,
+  FileReference,
+  CompletedTask,
+  Decision,
+  Learnings,
+  GitMetadata,
+  FilesModified,
+  HandoffFields,
+  FinalizeFields,
+  BaseArtifact,
+  CheckpointArtifact,
+  HandoffArtifact,
+  FinalizeArtifact,
+  UnifiedArtifact,
+} from './artifact-schema.js';
