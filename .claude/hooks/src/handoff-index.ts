@@ -29,6 +29,17 @@ interface BraintrustState {
   turn_count: string;
 }
 
+/**
+ * Frontmatter metadata from unified artifacts
+ */
+interface ArtifactFrontmatter {
+  event_type?: 'checkpoint' | 'handoff' | 'finalize';
+  schema_version?: string;
+  session_id?: string;
+  root_span_id?: string;
+  turn_span_id?: string;
+}
+
 function getCoordinationSessionId(inputSessionId: string): string {
   return process.env.BRAINTRUST_SPAN_ID?.slice(0, 8) || inputSessionId;
 }
@@ -124,9 +135,21 @@ function storeSessionAffinity(projectDir: string, terminalPid: number, sessionNa
 
 /**
  * Extract session name from handoff file path.
- * Path format: .../handoffs/<session-name>/...
+ * For unified artifacts, extracts session_id from filename.
+ * Filename format: YYYY-MM-DDTHH-MM-SS.sssZ_sessionid.md
+ * For legacy artifacts, extracts from path: .../handoffs/<session-name>/...
  */
 function extractSessionName(filePath: string): string | null {
+  const filename = filePath.split(/[/\\]/).pop();
+  if (filename) {
+    // Try to extract session_id from unified filename format
+    const match = filename.match(/_([0-9a-f]{8})\.md$/);
+    if (match) {
+      return match[1];
+    }
+  }
+
+  // Fallback to legacy path-based extraction
   const parts = filePath.split(/[/\\]/);
   const handoffsIdx = parts.findIndex(p => p === 'handoffs');
   if (handoffsIdx >= 0 && handoffsIdx < parts.length - 1) {
@@ -137,8 +160,45 @@ function extractSessionName(filePath: string): string | null {
 
 function isHandoffArtifact(filePath: string): boolean {
   const normalized = filePath.replace(/\\/g, '/');
+  // Accept both new unified location (events/) and legacy locations
   return normalized.includes('thoughts/shared/handoffs/') &&
     (normalized.endsWith('.md') || normalized.endsWith('.yaml') || normalized.endsWith('.yml'));
+}
+
+/**
+ * Extract frontmatter metadata from artifact content.
+ * Parses YAML frontmatter to get event_type and other metadata.
+ */
+function extractFrontmatter(content: string): ArtifactFrontmatter {
+  const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!frontmatterMatch) {
+    return {};
+  }
+
+  const frontmatterText = frontmatterMatch[1];
+  const metadata: ArtifactFrontmatter = {};
+
+  // Simple key-value parsing (sufficient for our needs)
+  const lines = frontmatterText.split('\n');
+  for (const line of lines) {
+    const match = line.match(/^(\w+):\s*(.+)$/);
+    if (match) {
+      const [, key, value] = match;
+      if (key === 'event_type') {
+        metadata.event_type = value as ArtifactFrontmatter['event_type'];
+      } else if (key === 'schema_version') {
+        metadata.schema_version = value;
+      } else if (key === 'session_id') {
+        metadata.session_id = value;
+      } else if (key === 'root_span_id') {
+        metadata.root_span_id = value;
+      } else if (key === 'turn_span_id') {
+        metadata.turn_span_id = value;
+      }
+    }
+  }
+
+  return metadata;
 }
 
 async function main() {
@@ -154,7 +214,8 @@ async function main() {
 
   const filePath = input.tool_input?.file_path || '';
 
-  // Only process canonical handoff artifacts (thoughts/shared/handoffs/**/*.{yaml,yml,md})
+  // Only process unified artifacts (thoughts/shared/handoffs/**/*.{yaml,yml,md})
+  // This includes checkpoint, handoff, and finalize events
   if (!isHandoffArtifact(filePath)) {
     console.log(JSON.stringify({ result: 'continue' }));
     return;
@@ -172,6 +233,9 @@ async function main() {
 
     // Read current file content
     let content = fs.readFileSync(fullPath, 'utf-8');
+
+    // Extract frontmatter metadata (including event_type)
+    const frontmatter = extractFrontmatter(content);
 
     // Check if frontmatter already has root_span_id
     const hasFrontmatter = content.startsWith('---');

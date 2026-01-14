@@ -96,6 +96,13 @@ function storeSessionAffinity(projectDir, terminalPid, sessionName) {
   }
 }
 function extractSessionName(filePath) {
+  const filename = filePath.split(/[/\\]/).pop();
+  if (filename) {
+    const match = filename.match(/_([0-9a-f]{8})\.md$/);
+    if (match) {
+      return match[1];
+    }
+  }
   const parts = filePath.split(/[/\\]/);
   const handoffsIdx = parts.findIndex((p) => p === "handoffs");
   if (handoffsIdx >= 0 && handoffsIdx < parts.length - 1) {
@@ -106,6 +113,33 @@ function extractSessionName(filePath) {
 function isHandoffArtifact(filePath) {
   const normalized = filePath.replace(/\\/g, "/");
   return normalized.includes("thoughts/shared/handoffs/") && (normalized.endsWith(".md") || normalized.endsWith(".yaml") || normalized.endsWith(".yml"));
+}
+function extractFrontmatter(content) {
+  const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!frontmatterMatch) {
+    return {};
+  }
+  const frontmatterText = frontmatterMatch[1];
+  const metadata = {};
+  const lines = frontmatterText.split("\n");
+  for (const line of lines) {
+    const match = line.match(/^(\w+):\s*(.+)$/);
+    if (match) {
+      const [, key, value] = match;
+      if (key === "event_type") {
+        metadata.event_type = value;
+      } else if (key === "schema_version") {
+        metadata.schema_version = value;
+      } else if (key === "session_id") {
+        metadata.session_id = value;
+      } else if (key === "root_span_id") {
+        metadata.root_span_id = value;
+      } else if (key === "turn_span_id") {
+        metadata.turn_span_id = value;
+      }
+    }
+  }
+  return metadata;
 }
 async function main() {
   const input = JSON.parse(await readStdin());
@@ -128,6 +162,7 @@ async function main() {
     }
     const ext = path.extname(fullPath).toLowerCase();
     let content = fs.readFileSync(fullPath, "utf-8");
+    const frontmatter = extractFrontmatter(content);
     const hasFrontmatter = content.startsWith("---");
     const hasRootSpanId = content.includes("root_span_id:");
     if (!hasRootSpanId) {
