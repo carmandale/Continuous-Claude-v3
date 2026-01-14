@@ -9,11 +9,14 @@
         "check": "tsc --noEmit",
         "dev": "npm run build && npm run check",
         "test": "vitest run --reporter=verbose",
-        "test:watch": "vitest"
+        "test:watch": "vitest",
+        "migrate": "tsx src/scripts/migrate-artifacts.ts",
+        "migrate:dry-run": "tsx src/scripts/migrate-artifacts.ts --dry-run"
     },
     "devDependencies": {
         "@types/node": "^20.11.0",
         "esbuild": "^0.24.0",
+        "tsx": "^4.21.0",
         "typescript": "^5.3.3",
         "vitest": "^4.0.16"
     },
