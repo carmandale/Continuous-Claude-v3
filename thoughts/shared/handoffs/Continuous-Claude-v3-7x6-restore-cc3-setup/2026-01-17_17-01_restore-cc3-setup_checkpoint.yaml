@@ -1,0 +1,18 @@
+---
+schema_version: "1.0.0"
+mode: checkpoint
+date: 2026-01-17T17:01:39.533Z
+session: "Continuous-Claude-v3-7x6-restore-cc3-setup"
+outcome: "PARTIAL_PLUS"
+primary_bead: "Continuous-Claude-v3-7x6"
+---
+
+goal: "Restore Claude Code hooks and skills after settings corruption"
+now: "Analyzed architecture: CC3 upstream skills vs personal skills in agent-skills. 10 hooks restored, 5 skills working. Discovered central skill repo at ~/.config/agent-skills"
+
+# Optional fields (YAML)
+# done_this_session:, next:, blockers:, questions:, decisions:, findings:, worked:, failed:, files:, test:, git:
+git:
+  branch: "feat/continuity-system"
+  commit: "7c94cfd89ca9da3870d9d4d2bb21f2681b515b6d"
+  remote: "https://github.com/carmandale/Continuous-Claude-v3.git"
